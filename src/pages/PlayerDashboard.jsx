@@ -758,17 +758,43 @@ const PlayerDashboard = () => {
           )}
 
           {/* Minhas Reservas */}
-          <Card title="📅 Minhas Reservas" style={{ marginBottom: '24px' }}>
-            <Table
-              dataSource={bookings}
-              columns={[
-                {
-                  title: 'Quadra',
-                  dataIndex: 'courtName',
-                  key: 'courtName',
-                },
-                {
-                  title: 'Estabelecimento',
+          <Card title="📅 Minhas Reservas" style={{ marginBottom: isMobile ? '16px' : '24px' }}>
+            {isMobile ? (
+              // Layout mobile com cards
+              <div>
+                {bookings.map(booking => (
+                  <Card 
+                    key={booking.id} 
+                    size="small" 
+                    style={{ marginBottom: '12px' }}
+                    title={booking.courtName}
+                  >
+                    <div style={{ fontSize: '14px' }}>
+                      <div><strong>🏢</strong> {booking.establishmentName}</div>
+                      <div><strong>📅</strong> {new Date(booking.date).toLocaleDateString('pt-BR')}</div>
+                      <div><strong>⏰</strong> {booking.time}</div>
+                      <div><strong>💰</strong> R$ {booking.totalPrice?.toFixed(2)}</div>
+                      <div style={{ marginTop: '8px' }}>
+                        <Tag color={booking.status === 'confirmed' ? 'green' : booking.status === 'pending' ? 'orange' : 'red'}>
+                          {booking.status === 'confirmed' ? 'Confirmada' : booking.status === 'pending' ? 'Pendente' : 'Cancelada'}
+                        </Tag>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              // Layout desktop com tabela
+              <Table
+                dataSource={bookings}
+                columns={[
+                  {
+                    title: 'Quadra',
+                    dataIndex: 'courtName',
+                    key: 'courtName',
+                  },
+                  {
+                    title: 'Estabelecimento',
                   dataIndex: 'establishmentName',
                   key: 'establishmentName',
                 },
@@ -839,20 +865,46 @@ const PlayerDashboard = () => {
               ]}
               pagination={false}
             />
+            )}
           </Card>
 
           {/* Histórico de Partidas */}
           <Card title="🏆 Histórico de Partidas">
             {matchHistory.length > 0 ? (
-              <Table
-                dataSource={matchHistory}
-                columns={[
-                  {
-                    title: 'Data',
-                    dataIndex: 'date',
-                    key: 'date',
-                    render: (date) => new Date(date).toLocaleDateString('pt-BR')
-                  },
+              isMobile ? (
+                // Layout mobile com cards
+                <div>
+                  {matchHistory.map(match => (
+                    <Card 
+                      key={match.id} 
+                      size="small" 
+                      style={{ marginBottom: '12px' }}
+                      title={`${match.sport} - ${new Date(match.date).toLocaleDateString('pt-BR')}`}
+                    >
+                      <div style={{ fontSize: '14px' }}>
+                        <div><strong>🏟️</strong> {match.courtName}</div>
+                        <div><strong>🏢</strong> {match.establishmentName}</div>
+                        <div><strong>⏰</strong> {match.time}</div>
+                        <div><strong>👥</strong> {match.players?.length || 0} jogadores</div>
+                        <div><strong>🏆</strong> {match.result || 'Partida realizada'}</div>
+                        <div style={{ marginTop: '8px' }}>
+                          <Tag color="blue">{match.sport}</Tag>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                // Layout desktop com tabela
+                <Table
+                  dataSource={matchHistory}
+                  columns={[
+                    {
+                      title: 'Data',
+                      dataIndex: 'date',
+                      key: 'date',
+                      render: (date) => new Date(date).toLocaleDateString('pt-BR')
+                    },
                   {
                     title: 'Quadra',
                     dataIndex: 'courtName',
@@ -916,13 +968,18 @@ const PlayerDashboard = () => {
                 pagination={{ pageSize: 5 }}
                 size="middle"
               />
+              )
             ) : (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
-                <TrophyOutlined style={{ fontSize: '48px', color: '#d9d9d9' }} />
+              <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '40px' }}>
+                <TrophyOutlined style={{ fontSize: isMobile ? '32px' : '48px', color: '#d9d9d9' }} />
                 <br />
-                <Text type="secondary">Nenhuma partida registrada ainda</Text>
+                <Text type="secondary" style={{ fontSize: isMobile ? '14px' : '16px' }}>
+                  Nenhuma partida registrada ainda
+                </Text>
                 <br />
-                <Text type="secondary">Suas partidas aparecerão aqui após serem finalizadas!</Text>
+                <Text type="secondary" style={{ fontSize: isMobile ? '12px' : '14px' }}>
+                  Suas partidas aparecerão aqui após serem finalizadas!
+                </Text>
               </div>
             )}
           </Card>

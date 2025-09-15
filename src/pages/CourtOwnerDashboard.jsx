@@ -55,6 +55,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import { mockGetSports, mockGetOwnerBookings, mockCourts, mockGetScheduleData, mockBlockTimeSlot, mockGetOwnerStats, mockConfirmBooking, mockCancelBooking } from '../utils/mockApi'
 import Logo from '../components/Logo'
+import useResponsive from '../hooks/useResponsive'
 import { vestiarioGradients, vestiarioStyles } from '../theme/vestiarioTheme'
 
 const { Header, Content } = Layout
@@ -68,6 +69,7 @@ const { Option } = Select
 const CourtOwnerDashboard = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { isMobile, isTablet, isDesktop } = useResponsive()
   const [bookings, setBookings] = useState([])
   const [sports, setSports] = useState([])
   const [scheduleData, setScheduleData] = useState([])
@@ -782,14 +784,62 @@ const CourtOwnerDashboard = () => {
           </Card>
 
           {/* Reservas */}
-          <Card title="Reservas">
-            <Table 
-              columns={columns} 
-              dataSource={bookings}
-              pagination={{ pageSize: 10 }}
-              size="middle"
-              loading={loading}
-            />
+          <Card title="Reservas" style={{ marginBottom: isMobile ? '16px' : '24px' }}>
+            {isMobile ? (
+              // Layout mobile com cards
+              <div>
+                {bookings.map(booking => (
+                  <Card 
+                    key={booking.id} 
+                    size="small" 
+                    style={{ marginBottom: '12px' }}
+                    title={`${booking.courtName} - ${new Date(booking.date).toLocaleDateString('pt-BR')}`}
+                  >
+                    <div style={{ fontSize: '14px' }}>
+                      <div><strong>👤</strong> {booking.playerName}</div>
+                      <div><strong>📧</strong> {booking.playerEmail}</div>
+                      <div><strong>📞</strong> {booking.playerPhone}</div>
+                      <div><strong>⏰</strong> {booking.time}</div>
+                      <div><strong>💰</strong> R$ {booking.totalPrice?.toFixed(2)}</div>
+                      <div style={{ marginTop: '8px' }}>
+                        <Tag color={booking.status === 'confirmed' ? 'green' : booking.status === 'pending' ? 'orange' : 'red'}>
+                          {booking.status === 'confirmed' ? 'Confirmada' : booking.status === 'pending' ? 'Pendente' : 'Cancelada'}
+                        </Tag>
+                      </div>
+                      <div style={{ marginTop: '8px' }}>
+                        <Space>
+                          {booking.status === 'pending' && (
+                            <Button 
+                              size="small" 
+                              type="primary" 
+                              onClick={() => handleConfirmBooking(booking.id)}
+                            >
+                              Confirmar
+                            </Button>
+                          )}
+                          <Button 
+                            size="small" 
+                            danger 
+                            onClick={() => handleCancelBooking(booking.id)}
+                          >
+                            Cancelar
+                          </Button>
+                        </Space>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              // Layout desktop com tabela
+              <Table 
+                columns={columns} 
+                dataSource={bookings}
+                pagination={{ pageSize: 10 }}
+                size="middle"
+                loading={loading}
+              />
+            )}
           </Card>
         </div>
 
