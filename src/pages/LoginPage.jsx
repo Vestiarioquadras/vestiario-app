@@ -12,7 +12,9 @@ import {
   Divider,
   Space,
   Tooltip,
-  Badge
+  Badge,
+  Row,
+  Col
 } from 'antd'
 import { 
   SafetyOutlined, 
@@ -27,6 +29,7 @@ import { useNavigate } from 'react-router-dom'
 import { validationConfig } from '../config/validation'
 import PrivacyPolicyModal from '../components/PrivacyPolicyModal'
 import Logo from '../components/Logo'
+import useResponsive from '../hooks/useResponsive'
 
 const { Title, Text, Link } = Typography
 
@@ -37,6 +40,7 @@ const { Title, Text, Link } = Typography
 const LoginPage = () => {
   const { login, loading } = useAuth()
   const navigate = useNavigate()
+  const { isMobile, isTablet, isDesktop, getConfig } = useResponsive()
   const [form] = Form.useForm()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -173,34 +177,59 @@ const LoginPage = () => {
     }
   }
 
+  // Configurações responsivas
+  const containerStyle = {
+    minHeight: '100vh',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    padding: isMobile ? '16px' : isTablet ? '20px' : '24px'
+  }
+
+  const cardStyle = {
+    width: '100%',
+    maxWidth: isMobile ? '100%' : isTablet ? '450px' : '500px',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+    borderRadius: '12px'
+  }
+
+  const cardBodyStyle = {
+    padding: isMobile ? '24px 20px' : isTablet ? '32px 28px' : '40px 32px'
+  }
+
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '20px'
-    }}>
+    <div style={containerStyle}>
       <Card
-        style={{
-          width: '100%',
-          maxWidth: 400,
-          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-          borderRadius: '12px'
-        }}
-        styles={{ body: { padding: '40px 32px' } }}
+        style={cardStyle}
+        styles={{ body: cardBodyStyle }}
       >
         {/* Logo e Título */}
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <div style={{ 
+          textAlign: 'center', 
+          marginBottom: isMobile ? '24px' : '32px' 
+        }}>
           <Logo 
-            size="medium" 
-            style={{ marginBottom: '16px' }}
+            size={isMobile ? "small" : "medium"} 
+            style={{ marginBottom: isMobile ? '12px' : '16px' }}
           />
-          <Title level={2} style={{ margin: 0, color: '#ff5e0e' }}>
+          <Title 
+            level={isMobile ? 3 : 2} 
+            style={{ 
+              margin: 0, 
+              color: '#ff5e0e',
+              fontWeight: 'bold',
+              fontSize: isMobile ? '20px' : isTablet ? '24px' : '28px'
+            }}
+          >
             Vestiário App
           </Title>
-          <Text type="secondary">
+          <Text 
+            type="secondary"
+            style={{ 
+              fontSize: isMobile ? '14px' : '16px' 
+            }}
+          >
             Faça login para acessar sua conta
           </Text>
         </div>

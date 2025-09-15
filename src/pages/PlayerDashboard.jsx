@@ -16,7 +16,8 @@ import {
   Form,
   message,
   notification,
-  Divider
+  Divider,
+  Drawer
 } from 'antd'
 import { 
   UserOutlined, 
@@ -29,13 +30,15 @@ import {
   HeartFilled,
   ReloadOutlined,
   TrophyOutlined,
-  TeamOutlined
+  TeamOutlined,
+  MenuOutlined
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import { mockGetSports, mockGetCourts, mockGetUserBookings, mockGetFavoriteCourts, mockAddFavoriteCourt, mockRemoveFavoriteCourt, mockGetMatchHistory, mockCreateBookingWithPayment, mockCancelBooking } from '../utils/mockApi'
 import PaymentForm from '../components/PaymentForm'
 import Logo from '../components/Logo'
+import useResponsive from '../hooks/useResponsive'
 
 const { Header, Content } = Layout
 const { Title, Text } = Typography
@@ -47,6 +50,7 @@ const { Title, Text } = Typography
 const PlayerDashboard = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { isMobile, isTablet, isDesktop, getConfig } = useResponsive()
   const [sports, setSports] = useState([])
   const [courts, setCourts] = useState([])
   const [bookings, setBookings] = useState([])
@@ -66,6 +70,7 @@ const PlayerDashboard = () => {
   const [selectedBooking, setSelectedBooking] = useState(null)
   const [calculatedPrice, setCalculatedPrice] = useState(0)
   const [form] = Form.useForm()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   /**
    * Carrega dados iniciais
@@ -404,22 +409,33 @@ const PlayerDashboard = () => {
       {/* Header */}
       <Header style={{ 
         background: '#fff', 
-        padding: '0 24px',
+        padding: isMobile ? '0 16px' : '0 24px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        height: isMobile ? '60px' : '64px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Logo size="small" style={{ marginRight: '16px' }} />
-          <div>
-            <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
-              Dashboard do Jogador
-            </Title>
-            <Text type="secondary">
-              Olá, {user?.name || user?.email}!
-            </Text>
-          </div>
+          {isMobile && (
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setMobileMenuOpen(true)}
+              style={{ marginRight: '12px' }}
+            />
+          )}
+          <Logo size={isMobile ? "small" : "medium"} style={{ marginRight: isMobile ? '12px' : '16px' }} />
+          {!isMobile && (
+            <div>
+              <Title level={4} style={{ margin: 0, color: '#ff5e0e' }}>
+                Dashboard do Jogador
+              </Title>
+              <Text type="secondary">
+                Olá, {user?.name || user?.email}!
+              </Text>
+            </div>
+          )}
         </div>
         
         <Button 
@@ -427,23 +443,53 @@ const PlayerDashboard = () => {
           danger 
           icon={<LogoutOutlined />}
           onClick={handleLogout}
+          size={isMobile ? "small" : "middle"}
         >
           Sair
         </Button>
       </Header>
 
       {/* Conteúdo Principal */}
-      <Content style={{ padding: '24px', background: '#f5f5f5' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <Content style={{ 
+        padding: isMobile ? '16px' : isTablet ? '20px' : '24px', 
+        background: '#f5f5f5' 
+      }}>
+        <div style={{ 
+          maxWidth: '1400px', 
+          margin: '0 auto',
+          padding: isMobile ? '0' : '0 16px'
+        }}>
           {/* Boas-vindas */}
-          <Card style={{ marginBottom: '24px', background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-              <Logo size="medium" style={{ marginRight: '16px' }} />
+          <Card style={{ 
+            marginBottom: isMobile ? '16px' : '24px', 
+            background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)' 
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              alignItems: isMobile ? 'flex-start' : 'center', 
+              marginBottom: '16px',
+              flexDirection: isMobile ? 'column' : 'row',
+              textAlign: isMobile ? 'center' : 'left'
+            }}>
+              {isMobile && (
+                <div style={{ marginBottom: '12px' }}>
+                  <Title level={3} style={{ margin: 0, color: '#ff5e0e' }}>
+                    Olá, {user?.name || 'Jogador'}! 👋
+                  </Title>
+                </div>
+              )}
+              <Logo size={isMobile ? "medium" : "large"} style={{ 
+                marginRight: isMobile ? '0' : '16px',
+                marginBottom: isMobile ? '12px' : '0'
+              }} />
               <div>
-                <Title level={2} style={{ margin: 0, color: '#1890ff' }}>
+                <Title level={isMobile ? 3 : 2} style={{ margin: 0, color: '#ff5e0e' }}>
                   Encontre seu esporte! 🏆
                 </Title>
-                <Text style={{ fontSize: '16px' }}>
+                <Text style={{ 
+                  fontSize: isMobile ? '14px' : '16px',
+                  display: isMobile ? 'block' : 'inline'
+                }}>
                   Busque estabelecimentos, reserve quadras e conecte-se com outros jogadores.
                 </Text>
               </div>
@@ -451,11 +497,18 @@ const PlayerDashboard = () => {
           </Card>
 
           {/* BARRA DE PESQUISA GRANDE E CLARA */}
-          <Card id="search-section" style={{ marginBottom: '24px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-            <Row gutter={[16, 16]} align="middle">
-              <Col xs={24} sm={6}>
+          <Card id="search-section" style={{ 
+            marginBottom: isMobile ? '16px' : '24px', 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+          }}>
+            <Row gutter={isMobile ? [8, 8] : [16, 16]} align="middle">
+              <Col xs={24} sm={12} md={6}>
                 <div style={{ textAlign: 'center' }}>
-                  <Text style={{ color: 'white', fontSize: '16px', fontWeight: 'bold' }}>
+                  <Text style={{ 
+                    color: 'white', 
+                    fontSize: isMobile ? '14px' : '16px', 
+                    fontWeight: 'bold' 
+                  }}>
                     🏃‍♂️ Esporte
                   </Text>
                   <br />
@@ -463,9 +516,9 @@ const PlayerDashboard = () => {
                     placeholder="Selecione o esporte"
                     style={{ 
                       width: '100%', 
-                      height: '48px'
+                      height: isMobile ? '40px' : '48px'
                     }}
-                    size="large"
+                    size={isMobile ? "middle" : "large"}
                     value={searchFilters.sport}
                     onChange={(value) => setSearchFilters({...searchFilters, sport: value})}
                   >
@@ -1015,6 +1068,44 @@ const PlayerDashboard = () => {
           bookingData={selectedBooking}
           totalAmount={selectedBooking?.totalPrice}
         />
+
+        {/* Drawer Mobile */}
+        <Drawer
+          title="Menu"
+          placement="left"
+          onClose={() => setMobileMenuOpen(false)}
+          open={mobileMenuOpen}
+          width={280}
+        >
+          <div style={{ padding: '16px 0' }}>
+            <div style={{ marginBottom: '24px', textAlign: 'center' }}>
+              <Logo size="medium" />
+              <Title level={4} style={{ margin: '12px 0 0 0', color: '#ff5e0e' }}>
+                Olá, {user?.name || 'Jogador'}! 👋
+              </Title>
+              <Text type="secondary">
+                Encontre quadras e reserve seu horário
+              </Text>
+            </div>
+            
+            <Divider />
+            
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Button 
+                type="primary" 
+                danger 
+                icon={<LogoutOutlined />}
+                onClick={() => {
+                  setMobileMenuOpen(false)
+                  handleLogout()
+                }}
+                block
+              >
+                Sair
+              </Button>
+            </Space>
+          </div>
+        </Drawer>
       </Content>
     </Layout>
   )

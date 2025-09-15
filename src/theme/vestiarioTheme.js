@@ -3,6 +3,49 @@
  * Baseado na identidade visual da marca com cor laranja #ff5e0e
  */
 
+// Breakpoints responsivos
+export const breakpoints = {
+  xs: '480px',
+  sm: '576px',
+  md: '768px',
+  lg: '992px',
+  xl: '1200px',
+  xxl: '1600px'
+}
+
+// Configurações responsivas
+export const responsiveConfig = {
+  // Espaçamentos responsivos
+  spacing: {
+    xs: { padding: 8, margin: 8 },
+    sm: { padding: 12, margin: 12 },
+    md: { padding: 16, margin: 16 },
+    lg: { padding: 24, margin: 24 },
+    xl: { padding: 32, margin: 32 }
+  },
+  
+  // Tamanhos de fonte responsivos
+  fontSize: {
+    xs: { base: 12, lg: 14, xl: 16 },
+    sm: { base: 14, lg: 16, xl: 18 },
+    md: { base: 16, lg: 18, xl: 20 },
+    lg: { base: 18, lg: 20, xl: 24 },
+    xl: { base: 20, lg: 24, xl: 28 }
+  },
+  
+  // Layout responsivo
+  layout: {
+    container: {
+      xs: { maxWidth: '100%', padding: '8px' },
+      sm: { maxWidth: '540px', padding: '12px' },
+      md: { maxWidth: '720px', padding: '16px' },
+      lg: { maxWidth: '960px', padding: '20px' },
+      xl: { maxWidth: '1140px', padding: '24px' },
+      xxl: { maxWidth: '1320px', padding: '32px' }
+    }
+  }
+}
+
 export const vestiarioTheme = {
   token: {
     // Cores principais baseadas na logo laranja #ff5e0e

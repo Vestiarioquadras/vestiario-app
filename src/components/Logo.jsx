@@ -1,5 +1,6 @@
 import { Image } from 'antd'
 import { vestiarioStyles } from '../theme/vestiarioTheme'
+import useResponsive from '../hooks/useResponsive'
 
 /**
  * Componente de logo do Vestiário
@@ -12,12 +13,26 @@ const Logo = ({
   className = '',
   onClick = null 
 }) => {
-  // Define tamanhos padrão
+  const { isMobile, isTablet } = useResponsive()
+  
+  // Define tamanhos padrão responsivos
   const sizeConfig = {
-    small: { width: 100, height: 50 },
-    medium: { width: 150, height: 75 },
-    large: { width: 200, height: 100 },
-    xlarge: { width: 250, height: 125 }
+    small: { 
+      width: isMobile ? 80 : isTablet ? 100 : 120, 
+      height: isMobile ? 40 : isTablet ? 50 : 60 
+    },
+    medium: { 
+      width: isMobile ? 120 : isTablet ? 150 : 180, 
+      height: isMobile ? 60 : isTablet ? 75 : 90 
+    },
+    large: { 
+      width: isMobile ? 160 : isTablet ? 200 : 240, 
+      height: isMobile ? 80 : isTablet ? 100 : 120 
+    },
+    xlarge: { 
+      width: isMobile ? 200 : isTablet ? 250 : 300, 
+      height: isMobile ? 100 : isTablet ? 125 : 150 
+    }
   }
 
   const logoStyle = {
