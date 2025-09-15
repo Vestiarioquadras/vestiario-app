@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Ícones PWA - Vestiário</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #ff5e0d;
+            text-align: center;
+        }
+        .logo-preview {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .logo-preview img {
+            max-width: 200px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+        }
+        .sizes {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .size-item {
+            text-align: center;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .size-item canvas {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+        button {
+            background: #ff5e0d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #e04a0a;
+        }
+        .download-all {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .download-all button {
+            background: #52c41a;
+            font-size: 18px;
+            padding: 15px 30px;
+        }
+        .download-all button:hover {
+            background: #389e0d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏆 Gerador de Ícones PWA - Vestiário</h1>
+        
+        <div class="logo-preview">
+            <h3>Logo Original:</h3>
+            <img id="logoPreview" src="../logo_e_nome_sem_fundo.png" alt="Logo Vestiário" onerror="this.style.display='none'">
+        </div>
+
+        <div class="download-all">
+            <button onclick="downloadAllIcons()">📱 Baixar Todos os Ícones PWA</button>
+        </div>
+
+        <div class="sizes" id="iconSizes">
+            <!-- Os ícones serão gerados aqui -->
+        </div>
+
+        <div style="text-align: center; margin-top: 30px; color: #666;">
+            <p>✅ Ícones gerados com a logo oficial do Vestiário</p>
+            <p>📱 Compatível com PWA, iOS, Android e Windows</p>
+        </div>
+    </div>
+
+    <script>
+        // Tamanhos necessários para PWA
+        const sizes = [16, 32, 72, 96, 128, 144, 152, 192, 384, 512];
+        
+        // Carrega a logo
+        const logo = new Image();
+        logo.crossOrigin = 'anonymous';
+        logo.onload = function() {
+            generateIcons();
+        };
+        logo.onerror = function() {
+            // Se não conseguir carregar a logo, usa um ícone padrão
+            generateDefaultIcons();
+        };
+        logo.src = '../logo_e_nome_sem_fundo.png';
+
+        function generateIcons() {
+            const container = document.getElementById('iconSizes');
+            container.innerHTML = '';
+
+            sizes.forEach(size => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+
+                // Fundo branco
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, size, size);
+
+                // Desenha a logo redimensionada
+                ctx.drawImage(logo, 0, 0, size, size);
+
+                const sizeItem = document.createElement('div');
+                sizeItem.className = 'size-item';
+                sizeItem.innerHTML = `
+                    <canvas width="${size}" height="${size}"></canvas>
+                    <div>${size}x${size}px</div>
+                    <button onclick="downloadIcon(${size})">Baixar</button>
+                `;
+                
+                // Copia o canvas desenhado
+                const newCanvas = sizeItem.querySelector('canvas');
+                const newCtx = newCanvas.getContext('2d');
+                newCtx.drawImage(canvas, 0, 0);
+
+                container.appendChild(sizeItem);
+            });
+        }
+
+        function generateDefaultIcons() {
+            const container = document.getElementById('iconSizes');
+            container.innerHTML = '';
+
+            sizes.forEach(size => {
+                const canvas = document.createElement('canvas');
+                canvas.width = size;
+                canvas.height = size;
+                const ctx = canvas.getContext('2d');
+
+                // Fundo gradiente laranja
+                const gradient = ctx.createLinearGradient(0, 0, size, size);
+                gradient.addColorStop(0, '#ff5e0d');
+                gradient.addColorStop(1, '#fb923c');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, size, size);
+
+                // Texto "V" centralizado
+                ctx.fillStyle = 'white';
+                ctx.font = `bold ${size * 0.6}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('V', size / 2, size / 2);
+
+                const sizeItem = document.createElement('div');
+                sizeItem.className = 'size-item';
+                sizeItem.innerHTML = `
+                    <canvas width="${size}" height="${size}"></canvas>
+                    <div>${size}x${size}px</div>
+                    <button onclick="downloadIcon(${size})">Baixar</button>
+                `;
+                
+                // Copia o canvas desenhado
+                const newCanvas = sizeItem.querySelector('canvas');
+                const newCtx = newCanvas.getContext('2d');
+                newCtx.drawImage(canvas, 0, 0);
+
+                container.appendChild(sizeItem);
+            });
+        }
+
+        function downloadIcon(size) {
+            const canvas = document.querySelector(`canvas[width="${size}"]`);
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `icon-${size}x${size}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        }
+
+        function downloadAllIcons() {
+            sizes.forEach((size, index) => {
+                setTimeout(() => {
+                    downloadIcon(size);
+                }, index * 200); // Delay entre downloads
+            });
+        }
+    </script>
+</body>
+</html>
+

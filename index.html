@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#667eea" />
+    <meta name="description" content="Plataforma para reserva de quadras esportivas. Conecte jogadores e donos de estabelecimentos esportivos." />
+    <meta name="keywords" content="quadras, esportes, reserva, futebol, basquete, tênis, padel" />
+    <meta name="author" content="Vestiário Team" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="/icons/icon-32x32.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-192x192.png" />
+    
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Vestiário" />
+    
+    <!-- Android PWA Support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Vestiário" />
+    
+    <!-- Microsoft PWA Support -->
+    <meta name="msapplication-TileColor" content="#667eea" />
+    <meta name="msapplication-tap-highlight" content="no" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://vestiario.app/" />
+    <meta property="og:title" content="Vestiário - Reserva de Quadras Esportivas" />
+    <meta property="og:description" content="Plataforma para reserva de quadras esportivas. Conecte jogadores e donos de estabelecimentos esportivos." />
+    <meta property="og:image" content="/icons/icon-512x512.svg" />
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://vestiario.app/" />
+    <meta property="twitter:title" content="Vestiário - Reserva de Quadras Esportivas" />
+    <meta property="twitter:description" content="Plataforma para reserva de quadras esportivas. Conecte jogadores e donos de estabelecimentos esportivos." />
+    <meta property="twitter:image" content="/icons/icon-512x512.svg" />
+    
+    <title>Vestiário - Reserva de Quadras Esportivas</title>
+    
+    <!-- Fonts -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+    />
+    
+    <!-- Preload critical resources -->
+    <!-- <link rel="preload" href="/icons/icon-192x192.png" as="image" /> -->
+    <!-- <link rel="preload" href="/icons/icon-512x512.png" as="image" /> -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- PWA Install Prompt -->
+    <script>
+      // Registra Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registrado com sucesso:', registration);
+            })
+            .catch((registrationError) => {
+              console.log('Falha no registro do SW:', registrationError);
+            });
+        });
+      }
+      
+      // PWA Install Prompt
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Mostra botão de instalação se necessário
+        const installButton = document.getElementById('install-button');
+        if (installButton) {
+          installButton.style.display = 'block';
+          installButton.addEventListener('click', () => {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then((choiceResult) => {
+              if (choiceResult.outcome === 'accepted') {
+                console.log('Usuário aceitou a instalação');
+              } else {
+                console.log('Usuário rejeitou a instalação');
+              }
+              deferredPrompt = null;
+            });
+          });
+        }
+      });
+      
+      // Detecta se o app foi instalado
+      window.addEventListener('appinstalled', (evt) => {
+        console.log('PWA foi instalado');
+        // Remove botão de instalação se existir
+        const installButton = document.getElementById('install-button');
+        if (installButton) {
+          installButton.style.display = 'none';
+        }
+      });
+    </script>
+  </body>
+</html>
+
