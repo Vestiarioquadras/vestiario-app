@@ -1,163 +1,126 @@
-import { useState, useEffect, createContext, useContext } from 'react'
-import Cookies from 'js-cookie'
-import { mockLogin } from '../utils/mockApi'
-import { appConfig, securityConfig } from '../config/validation'
+// 🔐 Hook de Autenticação para o Projeto Vestiário
+import { useState, useEffect, useContext, createContext } from 'react';
+import { onAuthStateChange, handleLogout } from '../services/authService';
 
-// Contexto de autenticação
-const AuthContext = createContext()
+// Criar Context para compartilhar estado de autenticação
+const AuthContext = createContext();
 
-/**
- * Hook personalizado para gerenciar autenticação
- * Fornece estado de autenticação, usuário logado e funções de login/logout
- */
+// Hook para usar o contexto de autenticação
 export const useAuth = () => {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth deve ser usado dentro de um AuthProvider')
+    throw new Error('useAuth deve ser usado dentro de AuthProvider');
   }
-  return context
-}
+  return context;
+};
 
-/**
- * Provider de autenticação
- * Gerencia o estado global de autenticação da aplicação
- */
+// Provider do contexto de autenticação
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  /**
-   * Decodifica o token JWT (versão simplificada)
-   * Em produção, use uma biblioteca como jwt-decode
-   * @param {string} token - Token JWT
-   * @returns {Object} Payload decodificado do token
-   */
-  const decodeToken = (token) => {
-    try {
-      const base64Url = token.split('.')[1]
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      )
-      return JSON.parse(jsonPayload)
-    } catch (error) {
-      console.error('Erro ao decodificar token:', error)
-      return null
-    }
-  }
-
-  /**
-   * Verifica se o token é válido
-   * @param {Object} payload - Payload do token
-   * @returns {boolean} True se o token for válido
-   */
-  const isTokenValid = (payload) => {
-    if (!payload || !payload.exp) return false
-    const currentTime = Date.now() / 1000
-    return payload.exp > currentTime
-  }
-
-  /**
-   * Inicializa a autenticação verificando o token armazenado
-   */
   useEffect(() => {
-    const initializeAuth = () => {
-      try {
-        const token = Cookies.get(securityConfig.cookies.name)
-        
-        if (token) {
-          const payload = decodeToken(token)
-          
-          if (payload && isTokenValid(payload)) {
-            setUser({
-              id: payload.userId,
-              email: payload.email,
-              role: payload.role,
-              name: payload.name
-            })
-            setIsAuthenticated(true)
-          } else {
-            // Token inválido ou expirado
-            Cookies.remove(securityConfig.cookies.name)
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao inicializar autenticação:', error)
-        Cookies.remove(securityConfig.cookies.name)
-      } finally {
-        setLoading(false)
-      }
-    }
+    // Configurar listener de estado de autenticação
+    const unsubscribe = onAuthStateChange((authData) => {
+      setUser(authData.user);
+      setRole(authData.role);
+      setUserData(authData.userData);
+      setIsAuthenticated(authData.isAuthenticated);
+      setLoading(false);
+    });
 
-    initializeAuth()
-  }, [])
+    // Cleanup do listener
+    return () => unsubscribe();
+  }, []);
 
-  /**
-   * Função de login
-   * @param {string} email - Email do usuário
-   * @param {string} password - Senha do usuário
-   * @returns {Promise<Object>} Resultado do login
-   */
-  const login = async (email, password) => {
+  // Função para verificar se usuário tem role específica
+  const hasRole = (requiredRole) => {
+    return role === requiredRole;
+  };
+
+  // Função para verificar se usuário é jogador
+  const isPlayer = () => {
+    return role === 'player';
+  };
+
+  // Função para verificar se usuário é dono
+  const isOwner = () => {
+    return role === 'owner' || role === 'court_owner';
+  };
+
+  // Função para verificar se usuário é admin
+  const isAdmin = () => {
+    return role === 'admin';
+  };
+
+  // Função para obter dados do usuário
+  const getUserInfo = () => {
+    return {
+      uid: user?.uid,
+      email: user?.email,
+      name: user?.displayName || userData?.name,
+      role: role,
+      ...userData
+    };
+  };
+
+  // Função para logout
+  const logout = async () => {
     try {
-      setLoading(true)
-      
-      // Usa a API mock para demonstração
-      // Em produção, substitua por chamadas reais para sua API
-      const result = await mockLogin(email, password)
-
-      if (result.success) {
-        const { token, user } = result
-        
-        // Armazena o token em cookie seguro
-        Cookies.set(securityConfig.cookies.name, token, {
-          expires: appConfig.cookieExpiresDays,
-          secure: securityConfig.cookies.secure,
-          sameSite: securityConfig.cookies.sameSite,
-          httpOnly: securityConfig.cookies.httpOnly
-        })
-
-        // Define o usuário e estado de autenticação
-        setUser(user)
-        setIsAuthenticated(true)
-
-        return { success: true, user }
-      } else {
-        return { success: false, error: result.error }
-      }
+      await handleLogout();
+      console.log('✅ Logout realizado com sucesso');
     } catch (error) {
-      console.error('Erro no login:', error)
-      return { success: false, error: 'Erro de conexão. Tente novamente.' }
-    } finally {
-      setLoading(false)
+      console.error('❌ Erro no logout:', error);
     }
-  }
-
-  /**
-   * Função de logout
-   * Remove o token e limpa o estado de autenticação
-   */
-  const logout = () => {
-    Cookies.remove(securityConfig.cookies.name)
-    setUser(null)
-    setIsAuthenticated(false)
-  }
+  };
 
   const value = {
     user,
+    role,
+    userData,
     isAuthenticated,
     loading,
-    login,
+    hasRole,
+    isPlayer,
+    isOwner,
+    isAdmin,
+    getUserInfo,
     logout
-  }
+  };
 
   return (
     <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
-  )
-}
+  );
+};
+
+// Hook personalizado para gerenciar estado de autenticação
+export const useAuthState = () => {
+  const [authState, setAuthState] = useState({
+    user: null,
+    role: null,
+    userData: null,
+    isAuthenticated: false,
+    loading: true
+  });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((authData) => {
+      setAuthState({
+        user: authData.user,
+        role: authData.role,
+        userData: authData.userData,
+        isAuthenticated: authData.isAuthenticated,
+        loading: false
+      });
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  return authState;
+};

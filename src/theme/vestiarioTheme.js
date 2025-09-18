@@ -57,85 +57,156 @@ export const vestiarioTheme = {
     
     // Cores de fundo
     colorBgContainer: '#ffffff',
-    colorBgElevated: '#f9fafb',
-    colorBgLayout: '#f3f4f6',
+    colorBgElevated: '#fafbfc',
+    colorBgLayout: '#f8fafc',
+    colorBgMask: 'rgba(0, 0, 0, 0.45)',
     
     // Cores de texto
-    colorText: '#111827',
+    colorText: '#1f2937',
     colorTextSecondary: '#6b7280',
     colorTextTertiary: '#9ca3af',
+    colorTextQuaternary: '#d1d5db',
     
     // Bordas
     colorBorder: '#e5e7eb',
     colorBorderSecondary: '#f3f4f6',
     
     // Raio de borda
-    borderRadius: 8,
-    borderRadiusLG: 12,
-    borderRadiusSM: 6,
+    borderRadius: 12,
+    borderRadiusLG: 16,
+    borderRadiusSM: 8,
+    borderRadiusXS: 6,
     
-    // Sombras
+    // Sombras melhoradas
     boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
     boxShadowSecondary: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
     boxShadowTertiary: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+    boxShadowTertiary: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
     
-    // Fontes
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    // Fontes melhoradas
+    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     fontSize: 14,
     fontSizeLG: 16,
     fontSizeSM: 12,
+    fontSizeXL: 18,
+    fontSizeHeading1: 32,
+    fontSizeHeading2: 24,
+    fontSizeHeading3: 20,
+    fontSizeHeading4: 16,
+    fontSizeHeading5: 14,
     
-    // Espaçamentos
+    // Espaçamentos melhorados
     padding: 16,
     paddingLG: 24,
     paddingSM: 12,
+    paddingXS: 8,
+    paddingXXS: 4,
     margin: 16,
     marginLG: 24,
     marginSM: 12,
+    marginXS: 8,
+    marginXXS: 4,
     
     // Alturas
-    controlHeight: 40,
-    controlHeightLG: 48,
-    controlHeightSM: 32,
+    controlHeight: 44,
+    controlHeightLG: 52,
+    controlHeightSM: 36,
+    controlHeightXS: 28,
+    
+    // Line heights
+    lineHeight: 1.5,
+    lineHeightLG: 1.6,
+    lineHeightSM: 1.4,
+    
+    // Motion
+    motionDurationFast: '0.1s',
+    motionDurationMid: '0.2s',
+    motionDurationSlow: '0.3s',
+    motionEaseInOut: 'cubic-bezier(0.645, 0.045, 0.355, 1)',
+    motionEaseOut: 'cubic-bezier(0.215, 0.61, 0.355, 1)',
+    motionEaseIn: 'cubic-bezier(0.55, 0.055, 0.675, 0.19)',
   },
   
   components: {
     // Configurações específicas para componentes
     Button: {
-      borderRadius: 8,
-      fontWeight: 500,
+      borderRadius: 12,
+      fontWeight: 600,
       boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+      controlHeight: 44,
+      controlHeightLG: 52,
+      controlHeightSM: 36,
+      paddingInline: 24,
+      paddingInlineLG: 32,
+      paddingInlineSM: 16,
     },
     Card: {
-      borderRadius: 12,
+      borderRadius: 16,
       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+      paddingLG: 24,
+      padding: 20,
+      paddingSM: 16,
     },
     Input: {
-      borderRadius: 8,
-      controlHeight: 40,
+      borderRadius: 12,
+      controlHeight: 44,
+      controlHeightLG: 52,
+      controlHeightSM: 36,
+      paddingInline: 16,
+      paddingBlock: 12,
     },
     Select: {
-      borderRadius: 8,
-      controlHeight: 40,
+      borderRadius: 12,
+      controlHeight: 44,
+      controlHeightLG: 52,
+      controlHeightSM: 36,
     },
     DatePicker: {
-      borderRadius: 8,
-      controlHeight: 40,
+      borderRadius: 12,
+      controlHeight: 44,
+      controlHeightLG: 52,
+      controlHeightSM: 36,
     },
     Modal: {
-      borderRadius: 12,
+      borderRadius: 16,
+      paddingLG: 24,
+      padding: 20,
+      paddingSM: 16,
     },
     Table: {
-      borderRadius: 8,
+      borderRadius: 12,
+      headerBg: '#fafbfc',
+      headerColor: '#374151',
+      headerSortActiveBg: '#f3f4f6',
+      rowHoverBg: '#f8fafc',
     },
     Form: {
       labelColor: '#374151',
       labelFontSize: 14,
-      labelFontWeight: 500,
+      labelFontWeight: 600,
+      labelHeight: 20,
+      itemMarginBottom: 20,
     },
     Typography: {
       titleMarginBottom: '0.5em',
       titleMarginTop: '1.2em',
+      colorText: '#1f2937',
+      colorTextSecondary: '#6b7280',
+      colorTextTertiary: '#9ca3af',
+    },
+    Tag: {
+      borderRadius: 8,
+      fontSize: 12,
+      lineHeight: 1.4,
+    },
+    Drawer: {
+      borderRadius: 16,
+    },
+    Notification: {
+      borderRadius: 12,
+    },
+    Message: {
+      borderRadius: 12,
     },
   },
 }
@@ -206,22 +277,87 @@ export const vestiarioGradients = {
 export const vestiarioStyles = {
   logo: {
     filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))',
-    transition: 'all 0.3s ease',
+    transition: 'all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1)',
   },
   card: {
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    borderRadius: 12,
-    border: '1px solid #e2e8f0',
+    borderRadius: 16,
+    border: '1px solid #e5e7eb',
+    transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)',
   },
   button: {
-    borderRadius: 8,
-    fontWeight: 500,
+    borderRadius: 12,
+    fontWeight: 600,
     boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)',
   },
   input: {
-    borderRadius: 8,
-    border: '1px solid #e2e8f0',
-    transition: 'all 0.2s ease',
+    borderRadius: 12,
+    border: '1px solid #e5e7eb',
+    transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)',
+  },
+  glass: {
+    background: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(10px)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+  },
+  shadow: {
+    light: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+    medium: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    large: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+    xlarge: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+  },
+}
+
+// Utilitários de layout
+export const layoutUtils = {
+  container: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '0 16px',
+    '@media (min-width: 768px)': {
+      padding: '0 24px',
+    },
+    '@media (min-width: 1024px)': {
+      padding: '0 32px',
+    },
+  },
+  section: {
+    padding: '48px 0',
+    '@media (min-width: 768px)': {
+      padding: '64px 0',
+    },
+    '@media (min-width: 1024px)': {
+      padding: '80px 0',
+    },
+  },
+  grid: {
+    display: 'grid',
+    gap: '24px',
+    '@media (min-width: 768px)': {
+      gap: '32px',
+    },
+  },
+}
+
+// Animações personalizadas
+export const animations = {
+  fadeIn: {
+    from: { opacity: 0, transform: 'translateY(20px)' },
+    to: { opacity: 1, transform: 'translateY(0)' },
+  },
+  slideIn: {
+    from: { transform: 'translateX(-100%)' },
+    to: { transform: 'translateX(0)' },
+  },
+  scaleIn: {
+    from: { transform: 'scale(0.95)', opacity: 0 },
+    to: { transform: 'scale(1)', opacity: 1 },
+  },
+  bounce: {
+    '0%, 20%, 53%, 80%, 100%': { transform: 'translate3d(0,0,0)' },
+    '40%, 43%': { transform: 'translate3d(0, -8px, 0)' },
+    '70%': { transform: 'translate3d(0, -4px, 0)' },
+    '90%': { transform: 'translate3d(0, -2px, 0)' },
   },
 }

@@ -1,0 +1,136 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 📋 Regras para coleção 'users'
+    // Usuários só podem ler/escrever seus próprios dados
+    match /users/{userId} {
+      // Permitir leitura e escrita apenas se o usuário estiver autenticado
+      // e o userId corresponder ao UID do usuário autenticado
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Permitir criação apenas se o usuário estiver autenticado
+      // e o userId corresponder ao UID do usuário autenticado
+      allow create: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['uid', 'email', 'role', 'name', 'createdAt'])
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['player', 'owner', 'court_owner'];
+    }
+    
+    // 🏟️ Regras para coleção 'courts'
+    // Permitir leitura para todos, escrita apenas para donos
+    match /courts/{courtId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para donos de quadras
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId;
+      
+      // Permitir criação para usuários autenticados (temporário para população)
+      allow create: if request.auth != null 
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+    
+    // 🏆 Regras para coleção 'sports'
+    // Dados públicos, leitura para todos
+    match /sports/{sportId} {
+      allow read: if request.auth != null;
+      // Permitir escrita para usuários autenticados (temporário para população)
+      allow write: if request.auth != null;
+    }
+    
+    // 📅 Regras para coleção 'bookings'
+    // Usuários podem gerenciar suas próprias reservas
+    match /bookings/{bookingId} {
+      // Permitir leitura para o jogador que fez a reserva ou o dono da quadra
+      allow read: if request.auth != null 
+        && (request.auth.uid == resource.data.playerId 
+            || request.auth.uid == resource.data.courtOwnerId);
+      
+      // Permitir escrita apenas para o jogador que fez a reserva
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.playerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.playerId == request.auth.uid;
+    }
+    
+    // ⭐ Regras para coleção 'reviews'
+    // Usuários podem gerenciar suas próprias avaliações
+    match /reviews/{reviewId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para o autor da avaliação
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.authorId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.authorId == request.auth.uid;
+    }
+    
+    // 🏢 Regras para coleção 'clubs'
+    // Donos podem gerenciar seus clubes
+    match /clubs/{clubId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para o dono do clube
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+    
+    // ❤️ Regras para coleção 'favorites'
+    // Usuários podem gerenciar seus próprios favoritos
+    match /favorites/{favoriteId} {
+      // Permitir leitura e escrita apenas para o dono do favorito
+      allow read, write: if request.auth != null 
+        && request.auth.uid == resource.data.userId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.userId == request.auth.uid;
+    }
+    
+    // 🏆 Regras para coleção 'matches'
+    // Usuários podem gerenciar suas próprias partidas
+    match /matches/{matchId} {
+      // Permitir leitura e escrita apenas para o jogador
+      allow read, write: if request.auth != null 
+        && request.auth.uid == resource.data.playerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.playerId == request.auth.uid;
+    }
+    
+    // 📅 Regras para coleção 'blockedSlots'
+    // Donos podem gerenciar horários bloqueados
+    match /blockedSlots/{slotId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para donos de quadras
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.ownerId == request.auth.uid;
+    }
+    
+    // 🚫 Negar acesso a todas as outras coleções
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

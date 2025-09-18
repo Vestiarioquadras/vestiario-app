@@ -35,7 +35,7 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { mockGetSports, mockGetCourts, mockGetUserBookings, mockGetFavoriteCourts, mockAddFavoriteCourt, mockRemoveFavoriteCourt, mockGetMatchHistory, mockCreateBookingWithPayment, mockCancelBooking } from '../utils/mockApi'
+import { sportsService, courtsService, bookingsService, favoritesService, matchHistoryService } from '../services/firestoreService'
 import PaymentForm from '../components/PaymentForm'
 import Logo from '../components/Logo'
 import useResponsive from '../hooks/useResponsive'
@@ -56,6 +56,8 @@ const PlayerDashboard = () => {
   const [bookings, setBookings] = useState([])
   const [favoriteCourts, setFavoriteCourts] = useState([])
   const [matchHistory, setMatchHistory] = useState([])
+  const [matchHistoryPage, setMatchHistoryPage] = useState(1)
+  const [showAllMatches, setShowAllMatches] = useState(false)
   const [loading, setLoading] = useState(false)
   const [searchFilters, setSearchFilters] = useState({
     sport: null,
@@ -73,29 +75,83 @@ const PlayerDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   /**
-   * Carrega dados iniciais
+   * Carrega dados iniciais quando o usuário é carregado
    */
   useEffect(() => {
+    if (user?.uid) {
     loadInitialData()
-  }, [])
+    }
+  }, [user?.uid])
 
   const loadInitialData = async () => {
+    if (!user?.uid) {
+      console.log('⏳ Aguardando usuário carregar...')
+      return
+    }
+    
     setLoading(true)
     try {
-      const [sportsData, bookingsData, favoritesData, historyData] = await Promise.all([
-        mockGetSports(),
-        mockGetUserBookings(user?.id),
-        mockGetFavoriteCourts(user?.id),
-        mockGetMatchHistory(user?.id)
+      console.log('🔄 Carregando dados para usuário:', user.uid)
+      const [sportsData, bookingsData, favoritesData, historyData, courtsData] = await Promise.all([
+        sportsService.getAllSports(),
+        bookingsService.getUserBookings(user.uid),
+        favoritesService.getFavoriteCourts(user.uid),
+        matchHistoryService.getMatchHistory(user.uid),
+        courtsService.getAllCourts()
       ])
+      
+      console.log('📊 Dados carregados:', {
+        sports: sportsData?.length || 0,
+        bookings: bookingsData?.length || 0,
+        favorites: favoritesData?.length || 0,
+        history: historyData?.length || 0,
+        courts: courtsData?.length || 0
+      })
+      
       setSports(sportsData)
       setBookings(bookingsData)
       setFavoriteCourts(favoritesData)
       setMatchHistory(historyData)
+      setCourts(courtsData)
     } catch (error) {
+      console.error('❌ Erro ao carregar dados:', error)
       message.error('Erro ao carregar dados')
     } finally {
       setLoading(false)
+    }
+  }
+
+  /**
+   * Processa o placar e determina a cor baseada no resultado
+   * @param {string} score - Placar no formato "3-1" ou "6-4, 6-2"
+   * @param {string} result - Resultado da partida
+   * @returns {Object} Objeto com placar formatado e cor
+   */
+  const processScore = (score, result) => {
+    if (!score) return { formattedScore: '-', color: '#666' }
+    
+    // Para tênis (formato "6-4, 6-2")
+    if (score && score.includes(',')) {
+      const sets = score.split(', ')
+      const ourSets = sets && sets.filter(set => {
+        const [our, opponent] = set.split('-').map(Number)
+        return our > opponent
+      }).length
+      const totalSets = sets.length
+      const won = ourSets > totalSets / 2
+      return {
+        formattedScore: score,
+        color: won ? '#10b981' : '#ef4444'
+      }
+    }
+    
+    // Para outros esportes (formato "3-1")
+    const [ourScore, opponentScore] = score ? score.split('-').map(Number) : [0, 0]
+    const won = ourScore > opponentScore
+    
+    return {
+      formattedScore: score,
+      color: won ? '#10b981' : '#ef4444'
     }
   }
 
@@ -105,7 +161,7 @@ const PlayerDashboard = () => {
   const searchCourts = async () => {
     setLoading(true)
     try {
-      const courtsData = await mockGetCourts(searchFilters.sport, searchFilters.location)
+      const courtsData = await courtsService.getAllCourts(searchFilters.sport, searchFilters.location)
       setCourts(courtsData)
       
       if (courtsData.length === 0) {
@@ -147,6 +203,13 @@ const PlayerDashboard = () => {
     setSelectedCourt(court)
     setCalculatedPrice(0) // Reseta o preço
     setBookingModalOpen(true)
+    
+    // Preencher automaticamente o campo courtId
+    setTimeout(() => {
+      form.setFieldsValue({
+        courtId: court.id
+      })
+    }, 100)
   }
 
   /**
@@ -155,8 +218,8 @@ const PlayerDashboard = () => {
   const calculateTotalPrice = (startTime, endTime, hourlyRate) => {
     if (!startTime || !endTime || !hourlyRate) return 0
     
-    const start = new Date(startTime)
-    const end = new Date(endTime)
+    const start = new Date(startTime || new Date())
+    const end = new Date(endTime || new Date())
     const durationMs = end.getTime() - start.getTime()
     const durationHours = durationMs / (1000 * 60 * 60) // Converter para horas
     
@@ -175,17 +238,14 @@ const PlayerDashboard = () => {
       form.setFieldsValue({ totalPrice: 0 })
     }
     
-    // Se mudou horários ou quadra, recalcula o preço
-    if ((changedValues.startTime || changedValues.endTime || changedValues.courtId) && 
-        allValues.startTime && allValues.endTime && allValues.courtId && selectedCourt) {
+    // Se mudou horários, recalcula o preço
+    if ((changedValues.startTime || changedValues.endTime) && 
+        allValues.startTime && allValues.endTime && selectedCourt) {
       
-      const selectedCourtData = selectedCourt.courts.find(c => c.id === allValues.courtId)
-      if (selectedCourtData) {
-        const price = calculateTotalPrice(allValues.startTime, allValues.endTime, selectedCourtData.hourlyRate)
-        console.log('Calculated price:', price, 'for court:', selectedCourtData.name, 'hourly rate:', selectedCourtData.hourlyRate)
+      const price = calculateTotalPrice(allValues.startTime, allValues.endTime, selectedCourt.price)
+      console.log('Calculated price:', price, 'for court:', selectedCourt.name, 'hourly rate:', selectedCourt.price)
         setCalculatedPrice(price)
         form.setFieldsValue({ totalPrice: price })
-      }
     }
   }
 
@@ -194,8 +254,7 @@ const PlayerDashboard = () => {
    */
   const handleCreateBooking = async (values) => {
     try {
-      const selectedCourtData = selectedCourt.courts.find(c => c.id === values.courtId)
-      const calculatedTotalPrice = calculateTotalPrice(values.startTime, values.endTime, selectedCourtData.hourlyRate)
+      const calculatedTotalPrice = calculateTotalPrice(values.startTime, values.endTime, selectedCourt.price)
       
       // Valida se o preço foi calculado corretamente
       if (calculatedTotalPrice <= 0) {
@@ -207,19 +266,49 @@ const PlayerDashboard = () => {
         return
       }
       
+      // Formatar data e horário corretamente
+      const selectedDate = values.startTime ? values.startTime.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0]
+      const startTime = values.startTime ? values.startTime.format('HH:mm') : '00:00'
+      const endTime = values.endTime ? values.endTime.format('HH:mm') : '00:00'
+      
+      // Debug: Log dos valores processados
+      console.log('🔍 Debug - Valores do formulário:')
+      console.log('  values.startTime:', values.startTime)
+      console.log('  values.endTime:', values.endTime)
+      console.log('  selectedDate:', selectedDate)
+      console.log('  formatted startTime:', startTime)
+      console.log('  formatted endTime:', endTime)
+      
+      console.log('🔍 Debug - Valores brutos:')
+      console.log('  values.startTime:', values.startTime)
+      console.log('  values.endTime:', values.endTime)
+      console.log('  startTime.format():', values.startTime ? values.startTime.format('YYYY-MM-DD HH:mm') : 'undefined')
+      console.log('  endTime.format():', values.endTime ? values.endTime.format('YYYY-MM-DD HH:mm') : 'undefined')
+      
       const bookingData = {
-        courtId: values.courtId,
-        courtName: selectedCourtData.name,
-        establishmentName: selectedCourt.name,
-        userId: user.id,
-        userName: user.name,
-        startTime: values.startTime.toISOString(),
-        endTime: values.endTime.toISOString(),
+        courtId: selectedCourt.id,
+        courtName: selectedCourt.name,
+        establishmentName: selectedCourt.establishmentName || selectedCourt.name,
+        playerId: user.uid,
+        playerName: user.displayName || user.email,
+        date: selectedDate,
+        time: startTime,
+        endTime: endTime,
         totalPrice: calculatedTotalPrice,
-        hourlyRate: selectedCourtData.hourlyRate,
-        duration: Math.round((new Date(values.endTime).getTime() - new Date(values.startTime).getTime()) / (1000 * 60 * 60) * 100) / 100,
-        sport: values.sport
+        price: selectedCourt.price,
+        duration: values.startTime && values.endTime ? Math.round((new Date(values.endTime).getTime() - new Date(values.startTime).getTime()) / (1000 * 60 * 60) * 100) / 100 : 0,
+        sport: selectedCourt.sport || 'Não informado',
+        status: 'pending'
       }
+      
+      // Debug: Log dos dados finais da reserva
+      console.log('📋 Debug - Dados da reserva:')
+      console.log('  date:', bookingData.date)
+      console.log('  time:', bookingData.time)
+      console.log('  endTime:', bookingData.endTime)
+      console.log('  totalPrice:', bookingData.totalPrice)
+      console.log('  courtName:', bookingData.courtName)
+      console.log('  playerName:', bookingData.playerName)
 
       // Armazena dados da reserva para pagamento
       setSelectedBooking(bookingData)
@@ -241,13 +330,22 @@ const PlayerDashboard = () => {
    */
   const handlePaymentSuccess = async () => {
     try {
-      const result = await mockCreateBookingWithPayment(selectedBooking, {
-        amount: selectedBooking.totalPrice,
-        cardNumber: '1234567890123456', // Simulado
-        email: user.email
-      })
+      // Criar dados da reserva para o Firebase
+      const bookingData = {
+        ...selectedBooking,
+        playerId: user.uid,
+        playerName: user.displayName || user.email,
+        // Usar os dados já processados corretamente
+        date: selectedBooking.date,
+        time: selectedBooking.time,
+        endTime: selectedBooking.endTime,
+        price: selectedBooking.totalPrice,
+        status: 'pending' // Mudar para 'pending' para que o dono possa confirmar
+      }
 
-      if (result.success) {
+      // Salvar reserva no Firebase
+      await bookingsService.createBooking(bookingData)
+
         notification.success({
           message: 'Reserva confirmada com sucesso!',
           description: `Quadra ${selectedBooking.courtName} reservada e paga`,
@@ -256,16 +354,10 @@ const PlayerDashboard = () => {
         setPaymentModalOpen(false)
         setSelectedBooking(null)
         loadInitialData()
-      } else {
-        notification.error({
-          message: 'Erro ao confirmar reserva',
-          description: result.error || 'Tente novamente',
-          placement: 'topRight'
-        })
-      }
     } catch (error) {
+      console.error('Erro ao criar reserva:', error)
       notification.error({
-        message: 'Erro ao processar pagamento',
+        message: 'Erro ao confirmar reserva',
         description: 'Tente novamente',
         placement: 'topRight'
       })
@@ -277,22 +369,18 @@ const PlayerDashboard = () => {
    */
   const handleCancelBooking = async (bookingId) => {
     try {
-      const result = await mockCancelBooking(bookingId, 'Cancelado pelo usuário')
-      if (result.success) {
+      await bookingsService.cancelBooking(bookingId)
+      
         notification.success({
           message: 'Reserva cancelada!',
           description: 'Sua reserva foi cancelada com sucesso',
           placement: 'topRight'
         })
+      
+      // Recarregar dados para refletir as mudanças
         loadInitialData()
-      } else {
-        notification.error({
-          message: 'Erro ao cancelar reserva',
-          description: result.error || 'Tente novamente',
-          placement: 'topRight'
-        })
-      }
     } catch (error) {
+      console.error('Erro ao cancelar reserva:', error)
       notification.error({
         message: 'Erro ao cancelar reserva',
         description: 'Tente novamente',
@@ -307,23 +395,26 @@ const PlayerDashboard = () => {
   const handleAddToFavorites = async (court) => {
     try {
       const favoriteData = {
-        userId: user.id,
+        userId: user.uid,
         courtId: court.id,
         courtName: court.name,
-        establishmentName: court.name,
-        establishmentId: court.id
+        establishmentName: court.establishmentName || court.name,
+        sport: court.sport,
+        price: court.price,
+        isIndoor: court.isIndoor || false,
+        rating: court.rating || 0
       }
 
-      const result = await mockAddFavoriteCourt(favoriteData)
-      if (result.success) {
-        notification.success({
-          message: 'Quadra adicionada aos favoritos!',
-          description: `${court.name} foi adicionada aos seus favoritos`,
-          placement: 'topRight'
-        })
-        loadInitialData()
-      }
+      await favoritesService.addFavoriteCourt(user.uid, court.id, favoriteData)
+      
+      notification.success({
+        message: 'Quadra adicionada aos favoritos!',
+        description: `${court.name} foi adicionada aos seus favoritos`,
+        placement: 'topRight'
+      })
+      loadInitialData()
     } catch (error) {
+      console.error('Erro ao adicionar favorito:', error)
       notification.error({
         message: 'Erro ao adicionar aos favoritos',
         description: 'Tente novamente',
@@ -337,16 +428,27 @@ const PlayerDashboard = () => {
    */
   const handleRemoveFromFavorites = async (favoriteId) => {
     try {
-      const result = await mockRemoveFavoriteCourt(favoriteId)
-      if (result.success) {
-        notification.success({
-          message: 'Quadra removida dos favoritos!',
-          description: 'A quadra foi removida da sua lista de favoritos',
+      // Encontrar o favorito para obter o courtId
+      const favorite = favoriteCourts && favoriteCourts.find(fav => fav.id === favoriteId)
+      if (!favorite) {
+        notification.error({
+          message: 'Favorito não encontrado',
+          description: 'Tente novamente',
           placement: 'topRight'
         })
-        loadInitialData()
+        return
       }
+
+      await favoritesService.removeFavoriteCourt(user.uid, favorite.courtId)
+      
+      notification.success({
+        message: 'Quadra removida dos favoritos!',
+        description: 'A quadra foi removida da sua lista de favoritos',
+        placement: 'topRight'
+      })
+      loadInitialData()
     } catch (error) {
+      console.error('Erro ao remover favorito:', error)
       notification.error({
         message: 'Erro ao remover dos favoritos',
         description: 'Tente novamente',
@@ -359,7 +461,7 @@ const PlayerDashboard = () => {
    * Verifica se uma quadra está nos favoritos
    */
   const isFavorite = (courtId) => {
-    return favoriteCourts.some(fav => fav.courtId === courtId)
+    return favoriteCourts && favoriteCourts.some(fav => fav.courtId === courtId)
   }
 
   /**
@@ -368,37 +470,46 @@ const PlayerDashboard = () => {
   const handleReserveFromFavorites = async (favorite) => {
     try {
       // Recarrega todas as quadras disponíveis
-      const courtsData = await mockGetCourts()
+      const courtsData = await courtsService.getAllCourts()
       setCourts(courtsData)
       
-      // Define a quadra favorita como selecionada
-      setSelectedFavoriteCourt(favorite)
+      // Encontra a quadra completa nos dados carregados
+      const fullCourtData = courtsData.find(court => court.id === favorite.courtId)
       
-      // Filtra as quadras para mostrar apenas a quadra favorita
-      setSearchFilters({
-        sport: null,
-        location: '',
-        date: null
+      if (!fullCourtData) {
+        notification.error({
+          message: 'Quadra não encontrada',
+          description: 'A quadra favorita não está mais disponível',
+          placement: 'topRight'
+        })
+        return
+      }
+      
+      // Define a quadra como selecionada
+      setSelectedCourt(fullCourtData)
+      
+      // Abre o modal de reserva diretamente
+      setBookingModalOpen(true)
+      
+      // Pré-preenche o formulário com os dados da quadra
+      form.setFieldsValue({
+        courtId: fullCourtData.id,
+        date: null, // Deixa vazio para o usuário escolher
+        startTime: null,
+        endTime: null
       })
-      
-      // Scroll para a seção de busca
-      setTimeout(() => {
-        const searchSection = document.getElementById('search-section')
-        if (searchSection) {
-          searchSection.scrollIntoView({ behavior: 'smooth' })
-        }
-      }, 100)
       
       notification.success({
-        message: 'Quadra selecionada!',
-        description: `Agora você pode reservar ${favorite.courtName}. Use os filtros para encontrar horários disponíveis.`,
+        message: 'Modal de reserva aberto!',
+        description: `Pronto para reservar ${favorite.courtName}. Escolha a data e horário.`,
         placement: 'topRight',
-        duration: 4
+        duration: 3
       })
     } catch (error) {
+      console.error('Erro ao abrir reserva de favorito:', error)
       notification.error({
-        message: 'Erro ao carregar quadras',
-        description: 'Não foi possível carregar as quadras disponíveis',
+        message: 'Erro ao abrir reserva',
+        description: 'Não foi possível abrir o modal de reserva',
         placement: 'topRight'
       })
     }
@@ -408,13 +519,17 @@ const PlayerDashboard = () => {
     <Layout style={{ minHeight: '100vh' }}>
       {/* Header */}
       <Header style={{ 
-        background: '#fff', 
+        background: 'linear-gradient(135deg, #ffffff 0%, #fafbfc 100%)', 
         padding: isMobile ? '0 16px' : '0 24px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        height: isMobile ? '60px' : '64px'
+        height: isMobile ? '64px' : '72px',
+        borderBottom: '1px solid #e5e7eb',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000
       }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {isMobile && (
@@ -422,20 +537,36 @@ const PlayerDashboard = () => {
               type="text"
               icon={<MenuOutlined />}
               onClick={() => setMobileMenuOpen(true)}
-              style={{ marginRight: '12px' }}
+              style={{ 
+                marginRight: '12px',
+                borderRadius: '8px',
+                height: '40px',
+                width: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
             />
           )}
-          <Logo size={isMobile ? "small" : "medium"} style={{ marginRight: isMobile ? '12px' : '16px' }} />
-          {!isMobile && (
+          <Logo size={isMobile ? "small" : "medium"} style={{ marginRight: isMobile ? '12px' : '20px' }} />
             <div>
-              <Title level={4} style={{ margin: 0, color: '#ff5e0e' }}>
+            <Title level={4} style={{ 
+              margin: 0, 
+              color: '#ff5e0e',
+              fontWeight: '600',
+              fontSize: isMobile ? '16px' : '20px',
+              lineHeight: 1.2
+            }}>
                 Dashboard do Jogador
               </Title>
-              <Text type="secondary">
+            <Text type="secondary" style={{ 
+              fontSize: isMobile ? '12px' : '14px',
+              lineHeight: 1.2,
+              display: 'block'
+            }}>
                 Olá, {user?.name || user?.email}!
               </Text>
             </div>
-          )}
         </div>
         
         <Button 
@@ -444,51 +575,90 @@ const PlayerDashboard = () => {
           icon={<LogoutOutlined />}
           onClick={handleLogout}
           size={isMobile ? "small" : "middle"}
+          style={{
+            borderRadius: '8px',
+            fontWeight: '500',
+            height: isMobile ? '36px' : '40px',
+            paddingInline: isMobile ? '12px' : '16px'
+          }}
         >
-          Sair
+          {isMobile ? 'Sair' : 'Sair'}
         </Button>
       </Header>
 
       {/* Conteúdo Principal */}
       <Content style={{ 
-        padding: isMobile ? '16px' : isTablet ? '20px' : '24px', 
-        background: '#f5f5f5' 
+        padding: isMobile ? '20px 16px' : isTablet ? '24px 20px' : '32px 24px', 
+        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+        minHeight: 'calc(100vh - 72px)'
       }}>
         <div style={{ 
           maxWidth: '1400px', 
-          margin: '0 auto',
-          padding: isMobile ? '0' : '0 16px'
+          margin: '0 auto'
         }}>
           {/* Boas-vindas */}
           <Card style={{ 
-            marginBottom: isMobile ? '16px' : '24px', 
-            background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)' 
+            marginBottom: isMobile ? '20px' : '32px', 
+            background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+            border: 'none',
+            color: 'white',
+            borderRadius: '20px',
+            boxShadow: '0 10px 15px -3px rgba(255, 94, 14, 0.3), 0 4px 6px -2px rgba(255, 94, 14, 0.1)',
+            overflow: 'hidden',
+            position: 'relative'
           }}>
+            {/* Efeito de fundo decorativo */}
+            <div style={{
+              position: 'absolute',
+              top: '-50%',
+              right: '-20%',
+              width: '200px',
+              height: '200px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '50%',
+              zIndex: 1
+            }} />
+            <div style={{
+              position: 'absolute',
+              bottom: '-30%',
+              left: '-10%',
+              width: '150px',
+              height: '150px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '50%',
+              zIndex: 1
+            }} />
+            
             <div style={{ 
               display: 'flex', 
               alignItems: isMobile ? 'flex-start' : 'center', 
               marginBottom: '16px',
               flexDirection: isMobile ? 'column' : 'row',
-              textAlign: isMobile ? 'center' : 'left'
+              textAlign: isMobile ? 'center' : 'left',
+              position: 'relative',
+              zIndex: 2
             }}>
               {isMobile && (
                 <div style={{ marginBottom: '12px' }}>
-                  <Title level={3} style={{ margin: 0, color: '#ff5e0e' }}>
+                  <Title level={3} style={{ margin: 0, color: 'white', fontWeight: '600' }}>
                     Olá, {user?.name || 'Jogador'}! 👋
                   </Title>
                 </div>
               )}
               <Logo size={isMobile ? "medium" : "large"} style={{ 
-                marginRight: isMobile ? '0' : '16px',
-                marginBottom: isMobile ? '12px' : '0'
+                marginRight: isMobile ? '0' : '20px',
+                marginBottom: isMobile ? '12px' : '0',
+                filter: 'brightness(0) invert(1)'
               }} />
               <div>
-                <Title level={isMobile ? 3 : 2} style={{ margin: 0, color: '#ff5e0e' }}>
+                <Title level={isMobile ? 3 : 2} style={{ margin: 0, color: 'white', fontWeight: '600' }}>
                   Encontre seu esporte! 🏆
                 </Title>
                 <Text style={{ 
                   fontSize: isMobile ? '14px' : '16px',
-                  display: isMobile ? 'block' : 'inline'
+                  display: isMobile ? 'block' : 'inline',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontWeight: '400'
                 }}>
                   Busque estabelecimentos, reserve quadras e conecte-se com outros jogadores.
                 </Text>
@@ -498,10 +668,37 @@ const PlayerDashboard = () => {
 
           {/* BARRA DE PESQUISA GRANDE E CLARA */}
           <Card id="search-section" style={{ 
-            marginBottom: isMobile ? '16px' : '24px', 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+            marginBottom: isMobile ? '20px' : '32px', 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            border: 'none',
+            borderRadius: '20px',
+            boxShadow: '0 10px 15px -3px rgba(102, 126, 234, 0.3), 0 4px 6px -2px rgba(102, 126, 234, 0.1)',
+            overflow: 'hidden',
+            position: 'relative'
           }}>
-            <Row gutter={isMobile ? [8, 8] : [16, 16]} align="middle">
+            {/* Efeito de fundo decorativo */}
+            <div style={{
+              position: 'absolute',
+              top: '-30%',
+              right: '-15%',
+              width: '150px',
+              height: '150px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '50%',
+              zIndex: 1
+            }} />
+            <div style={{
+              position: 'absolute',
+              bottom: '-20%',
+              left: '-10%',
+              width: '100px',
+              height: '100px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '50%',
+              zIndex: 1
+            }} />
+            
+            <Row gutter={isMobile ? [8, 8] : [16, 16]} align="middle" style={{ position: 'relative', zIndex: 2 }}>
               <Col xs={24} sm={12} md={6}>
                 <div style={{ textAlign: 'center' }}>
                   <Text style={{ 
@@ -516,13 +713,17 @@ const PlayerDashboard = () => {
                     placeholder="Selecione o esporte"
                     style={{ 
                       width: '100%', 
-                      height: isMobile ? '40px' : '48px'
+                      height: isMobile ? '44px' : '52px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      backdropFilter: 'blur(10px)'
                     }}
                     size={isMobile ? "middle" : "large"}
                     value={searchFilters.sport}
                     onChange={(value) => setSearchFilters({...searchFilters, sport: value})}
                   >
-                    {sports.map(sport => (
+                    {sports && sports.map(sport => (
                       <Select.Option key={sport.id} value={sport.name}>
                         {sport.icon} {sport.name}
                       </Select.Option>
@@ -536,17 +737,51 @@ const PlayerDashboard = () => {
                     📍 Localização
                   </Text>
                   <br />
-                  <Input
-                    placeholder="Digite a localização"
+                  <Select
+                    placeholder="Selecione o estado"
                     value={searchFilters.location}
-                    onChange={(e) => setSearchFilters({...searchFilters, location: e.target.value})}
-                    prefix={<EnvironmentOutlined />}
+                    onChange={(value) => setSearchFilters({...searchFilters, location: value})}
                     style={{ 
-                      height: '48px', 
-                      fontSize: '16px'
+                      height: isMobile ? '44px' : '52px', 
+                      fontSize: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      backdropFilter: 'blur(10px)',
+                      width: '100%'
                     }}
-                    size="large"
-                  />
+                    size={isMobile ? "middle" : "large"}
+                    suffixIcon={<EnvironmentOutlined style={{ color: 'white' }} />}
+                  >
+                    <Select.Option value="">Todos os estados</Select.Option>
+                    <Select.Option value="São Paulo">São Paulo</Select.Option>
+                    <Select.Option value="Rio de Janeiro">Rio de Janeiro</Select.Option>
+                    <Select.Option value="Minas Gerais">Minas Gerais</Select.Option>
+                    <Select.Option value="Bahia">Bahia</Select.Option>
+                    <Select.Option value="Paraná">Paraná</Select.Option>
+                    <Select.Option value="Rio Grande do Sul">Rio Grande do Sul</Select.Option>
+                    <Select.Option value="Pernambuco">Pernambuco</Select.Option>
+                    <Select.Option value="Ceará">Ceará</Select.Option>
+                    <Select.Option value="Pará">Pará</Select.Option>
+                    <Select.Option value="Santa Catarina">Santa Catarina</Select.Option>
+                    <Select.Option value="Goiás">Goiás</Select.Option>
+                    <Select.Option value="Maranhão">Maranhão</Select.Option>
+                    <Select.Option value="Paraíba">Paraíba</Select.Option>
+                    <Select.Option value="Espírito Santo">Espírito Santo</Select.Option>
+                    <Select.Option value="Piauí">Piauí</Select.Option>
+                    <Select.Option value="Alagoas">Alagoas</Select.Option>
+                    <Select.Option value="Tocantins">Tocantins</Select.Option>
+                    <Select.Option value="Rio Grande do Norte">Rio Grande do Norte</Select.Option>
+                    <Select.Option value="Acre">Acre</Select.Option>
+                    <Select.Option value="Amapá">Amapá</Select.Option>
+                    <Select.Option value="Amazonas">Amazonas</Select.Option>
+                    <Select.Option value="Mato Grosso">Mato Grosso</Select.Option>
+                    <Select.Option value="Mato Grosso do Sul">Mato Grosso do Sul</Select.Option>
+                    <Select.Option value="Rondônia">Rondônia</Select.Option>
+                    <Select.Option value="Roraima">Roraima</Select.Option>
+                    <Select.Option value="Sergipe">Sergipe</Select.Option>
+                    <Select.Option value="Distrito Federal">Distrito Federal</Select.Option>
+                  </Select>
                 </div>
               </Col>
               <Col xs={24} sm={6}>
@@ -558,7 +793,11 @@ const PlayerDashboard = () => {
                   <DatePicker
                     style={{ 
                       width: '100%', 
-                      height: '48px'
+                      height: isMobile ? '44px' : '52px',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      backdropFilter: 'blur(10px)'
                     }}
                     size="large"
                     placeholder="Selecione a data"
@@ -581,10 +820,23 @@ const PlayerDashboard = () => {
                       onClick={searchCourts}
                       loading={loading}
                       style={{ 
-                        height: '48px', 
+                        height: isMobile ? '44px' : '52px', 
                         width: '100%',
                         fontSize: '16px',
-                        fontWeight: 'bold'
+                        fontWeight: '600',
+                        borderRadius: '12px',
+                        background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+                        border: 'none',
+                        boxShadow: '0 4px 12px rgba(255, 94, 14, 0.3)',
+                        transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.target.style.transform = 'translateY(-2px)'
+                        e.target.style.boxShadow = '0 6px 16px rgba(255, 94, 14, 0.4)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.target.style.transform = 'translateY(0)'
+                        e.target.style.boxShadow = '0 4px 12px rgba(255, 94, 14, 0.3)'
                       }}
                     >
                       Buscar Quadras
@@ -638,9 +890,9 @@ const PlayerDashboard = () => {
 
           {/* Quadras Favoritas */}
           <Card title="⭐ Quadras Favoritas" style={{ marginBottom: '24px' }}>
-            {favoriteCourts.length > 0 ? (
+            {favoriteCourts && favoriteCourts.length > 0 ? (
               <Row gutter={[16, 16]}>
-                {favoriteCourts.map(favorite => (
+                {favoriteCourts && favoriteCourts.map(favorite => (
                   <Col xs={24} sm={12} md={8} key={favorite.id}>
                     <Card 
                       size="small"
@@ -661,8 +913,16 @@ const PlayerDashboard = () => {
                         <Text strong>🏢 {favorite.establishmentName}</Text>
                         <br />
                         <Text type="secondary">
-                          Adicionado em: {new Date(favorite.addedDate).toLocaleDateString('pt-BR')}
+                          Adicionado em: {favorite.createdAt ? new Date(favorite.createdAt.toDate ? favorite.createdAt.toDate() : favorite.createdAt).toLocaleDateString('pt-BR') : 'Data não disponível'}
                         </Text>
+                        <br />
+                        <Text strong>Esporte:</Text> <Tag color="blue">{favorite.sport || 'Não informado'}</Tag>
+                        <br />
+                        <Text strong>Preço:</Text> R$ {favorite.price || 'Não informado'}/hora
+                        <br />
+                        <Text strong>Tipo:</Text> {favorite.isIndoor ? 'Coberta' : 'Descoberta'}
+                        <br />
+                        <Text strong>Rating:</Text> ⭐ {favorite.rating || 0}/5.0
                         <br />
                         <Button 
                           type="primary" 
@@ -691,10 +951,10 @@ const PlayerDashboard = () => {
           </Card>
 
           {/* Lista de Estabelecimentos */}
-          {courts.length > 0 && (
+          {courts && courts.length > 0 && (
             <Card title="Estabelecimentos Encontrados" style={{ marginBottom: '24px' }}>
               <Row gutter={[16, 16]}>
-                {courts.map(court => (
+                {courts && courts.map(court => (
                   <Col xs={24} md={12} key={court.id}>
                     <Card 
                       hoverable
@@ -710,7 +970,7 @@ const PlayerDashboard = () => {
                           type={isFavorite(court.id) ? "default" : "dashed"}
                           icon={isFavorite(court.id) ? <HeartFilled /> : <HeartOutlined />}
                           onClick={() => isFavorite(court.id) ? 
-                            handleRemoveFromFavorites(favoriteCourts.find(fav => fav.courtId === court.id)?.id) : 
+                            handleRemoveFromFavorites(favoriteCourts && favoriteCourts.find(fav => fav.courtId === court.id)?.id) : 
                             handleAddToFavorites(court)
                           }
                         >
@@ -727,28 +987,17 @@ const PlayerDashboard = () => {
                         </Text>
                         <br />
                         <Text type="secondary">
-                          <TeamOutlined /> {court.sports.join(', ')}
+                          <TeamOutlined /> {court.sports ? court.sports.join(', ') : court.sport || 'Não informado'}
                         </Text>
                         <br />
                         <Text type="secondary">
                           ⭐ {court.rating}/5.0
                         </Text>
                         <Divider style={{ margin: '12px 0' }} />
-                        <Text strong>Quadras disponíveis:</Text>
-                        <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                          {court.courts.map(courtItem => (
-                            <li key={courtItem.id}>
-                              <Text>
-                                {courtItem.name} - R$ {courtItem.hourlyRate}/hora
-                                {courtItem.isAvailable ? (
+                        <Text strong>Preço:</Text> R$ {court.price}/hora
+                        <br />
+                        <Text strong>Status:</Text> 
                                   <Tag color="green" style={{ marginLeft: '8px' }}>Disponível</Tag>
-                                ) : (
-                                  <Tag color="red" style={{ marginLeft: '8px' }}>Ocupada</Tag>
-                                )}
-                              </Text>
-                            </li>
-                          ))}
-                        </ul>
                       </div>
                     </Card>
                   </Col>
@@ -762,7 +1011,7 @@ const PlayerDashboard = () => {
             {isMobile ? (
               // Layout mobile com cards
               <div>
-                {bookings.map(booking => (
+                {bookings && bookings.map(booking => (
                   <Card 
                     key={booking.id} 
                     size="small" 
@@ -771,7 +1020,7 @@ const PlayerDashboard = () => {
                   >
                     <div style={{ fontSize: '14px' }}>
                       <div><strong>🏢</strong> {booking.establishmentName}</div>
-                      <div><strong>📅</strong> {new Date(booking.date).toLocaleDateString('pt-BR')}</div>
+                      <div><strong>📅</strong> {booking.date ? booking.date.split('-').reverse().join('/') : 'Data não disponível'}</div>
                       <div><strong>⏰</strong> {booking.time}</div>
                       <div><strong>💰</strong> R$ {booking.totalPrice?.toFixed(2)}</div>
                       <div style={{ marginTop: '8px' }}>
@@ -809,10 +1058,10 @@ const PlayerDashboard = () => {
                   key: 'datetime',
                   render: (_, record) => (
                     <div>
-                      <Text>{new Date(record.startTime).toLocaleDateString('pt-BR')}</Text>
+                      <Text>{record.date ? record.date.split('-').reverse().join('/') : 'Data não disponível'}</Text>
                       <br />
                       <Text type="secondary">
-                        <ClockCircleOutlined /> {new Date(record.startTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {new Date(record.endTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        <ClockCircleOutlined /> {record.time}
                       </Text>
                     </div>
                   )
@@ -868,107 +1117,109 @@ const PlayerDashboard = () => {
             )}
           </Card>
 
-          {/* Histórico de Partidas */}
+          {/* Histórico de Partidas - Versão Minimalista */}
           <Card title="🏆 Histórico de Partidas">
-            {matchHistory.length > 0 ? (
-              isMobile ? (
-                // Layout mobile com cards
+            {matchHistory && matchHistory.length > 0 ? (
                 <div>
-                  {matchHistory.map(match => (
-                    <Card 
-                      key={match.id} 
-                      size="small" 
-                      style={{ marginBottom: '12px' }}
-                      title={`${match.sport} - ${new Date(match.date).toLocaleDateString('pt-BR')}`}
-                    >
-                      <div style={{ fontSize: '14px' }}>
-                        <div><strong>🏟️</strong> {match.courtName}</div>
-                        <div><strong>🏢</strong> {match.establishmentName}</div>
-                        <div><strong>⏰</strong> {match.time}</div>
-                        <div><strong>👥</strong> {match.players?.length || 0} jogadores</div>
-                        <div><strong>🏆</strong> {match.result || 'Partida realizada'}</div>
-                        <div style={{ marginTop: '8px' }}>
-                          <Tag color="blue">{match.sport}</Tag>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                // Layout desktop com tabela
+                {/* Tabela simplificada */}
                 <Table
-                  dataSource={matchHistory}
+                  dataSource={showAllMatches ? matchHistory : matchHistory?.slice(0, 5) || []}
                   columns={[
-                    {
-                      title: 'Data',
-                      dataIndex: 'date',
-                      key: 'date',
-                      render: (date) => new Date(date).toLocaleDateString('pt-BR')
-                    },
                   {
                     title: 'Quadra',
                     dataIndex: 'courtName',
                     key: 'courtName',
+                      render: (courtName) => (
+                        <Text style={{ fontWeight: 500 }}>{courtName}</Text>
+                      )
                   },
                   {
                     title: 'Esporte',
                     dataIndex: 'sport',
                     key: 'sport',
-                    render: (sport) => <Tag color="blue">{sport}</Tag>
-                  },
-                  {
-                    title: 'Horário',
-                    key: 'time',
-                    render: (_, record) => (
-                      <Text>{record.startTime} - {record.endTime}</Text>
-                    )
-                  },
-                  {
-                    title: 'Resultado',
-                    dataIndex: 'result',
-                    key: 'result',
-                    render: (result) => (
-                      <Tag color={result === 'Vitória' ? 'green' : 'red'}>
-                        {result}
+                      render: (sport) => (
+                        <Tag 
+                          color="blue" 
+                          style={{ 
+                            textTransform: 'capitalize',
+                            fontWeight: 500,
+                            borderRadius: '12px'
+                          }}
+                        >
+                          {sport}
                       </Tag>
                     )
                   },
                   {
                     title: 'Placar',
-                    dataIndex: 'score',
                     key: 'score',
-                    render: (score) => <Text strong>{score}</Text>
-                  },
-                  {
-                    title: 'Jogadores',
-                    dataIndex: 'players',
-                    key: 'players',
-                    render: (players) => (
-                      <div>
-                        {players.slice(0, 2).map((player, index) => (
-                          <Text key={index} style={{ display: 'block', fontSize: '12px' }}>
-                            {player}
+                      render: (_, record) => {
+                        const score = `${record.playerScore}-${record.opponentScore}`
+                        const { formattedScore, color } = processScore(score, record.result)
+                        return (
+                          <Text 
+                            strong 
+                            style={{ 
+                              color: color,
+                              fontSize: '16px',
+                              fontWeight: 600
+                            }}
+                          >
+                            {formattedScore}
                           </Text>
-                        ))}
-                        {players.length > 2 && (
-                          <Text type="secondary" style={{ fontSize: '12px' }}>
-                            +{players.length - 2} outros
-                          </Text>
-                        )}
-                      </div>
-                    )
-                  },
-                  {
-                    title: 'Valor',
-                    dataIndex: 'price',
-                    key: 'price',
-                    render: (price) => <Text strong>R$ {price}</Text>
-                  }
-                ]}
-                pagination={{ pageSize: 5 }}
+                        )
+                      }
+                    }
+                  ]}
+                  pagination={false}
                 size="middle"
-              />
-              )
+                  rowKey="id"
+                  style={{ marginBottom: '16px' }}
+                />
+
+                {/* Controles de paginação */}
+                {matchHistory && matchHistory.length > 5 && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '12px 0',
+                    borderTop: '1px solid #f0f0f0'
+                  }}>
+                    {!showAllMatches ? (
+                      <Button 
+                        type="link" 
+                        onClick={() => setShowAllMatches(true)}
+                        style={{ 
+                          color: '#ff5e0e',
+                          fontWeight: 500
+                        }}
+                      >
+                        Ver mais partidas ({(matchHistory?.length || 0) - 5} restantes)
+                      </Button>
+                    ) : (
+                      <Button 
+                        type="link" 
+                        onClick={() => setShowAllMatches(false)}
+                        style={{ 
+                          color: '#6b7280',
+                          fontWeight: 500
+                        }}
+                      >
+                        Ver menos partidas
+                      </Button>
+                    )}
+                    
+                    {matchHistory && matchHistory.length > 10 && (
+                      <div style={{ 
+                        marginTop: '8px',
+                        fontSize: '12px',
+                        color: '#9ca3af'
+                      }}>
+                        Mostrando {Math.min(matchHistory?.length || 0, 10)} de {matchHistory?.length || 0} partidas
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             ) : (
               <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '40px' }}>
                 <TrophyOutlined style={{ fontSize: isMobile ? '32px' : '48px', color: '#d9d9d9' }} />
@@ -1005,11 +1256,9 @@ const PlayerDashboard = () => {
               rules={[{ required: true, message: 'Selecione uma quadra!' }]}
             >
               <Select placeholder="Selecione a quadra">
-                {selectedCourt?.courts.filter(court => court.isAvailable).map(court => (
-                  <Select.Option key={court.id} value={court.id}>
-                    {court.name} - R$ {court.hourlyRate}/hora
-                  </Select.Option>
-                ))}
+                <Select.Option key={selectedCourt?.id} value={selectedCourt?.id}>
+                  {selectedCourt?.name} - R$ {selectedCourt?.price}/hora
+                </Select.Option>
               </Select>
             </Form.Item>
 
@@ -1019,7 +1268,7 @@ const PlayerDashboard = () => {
               rules={[{ required: true, message: 'Selecione o esporte!' }]}
             >
               <Select placeholder="Selecione o esporte">
-                {sports.map(sport => (
+                {sports && sports.map(sport => (
                   <Select.Option key={sport.id} value={sport.name}>
                     {sport.icon} {sport.name}
                   </Select.Option>
@@ -1092,7 +1341,7 @@ const PlayerDashboard = () => {
                 marginBottom: '16px'
               }}>
                 <Text type="secondary" style={{ fontSize: '12px' }}>
-                  💡 <strong>Cálculo Automático:</strong> R$ {selectedCourt?.courts.find(c => c.id === form.getFieldValue('courtId'))?.hourlyRate || 0} por hora × {calculatedPrice > 0 ? (calculatedPrice / (selectedCourt?.courts.find(c => c.id === form.getFieldValue('courtId'))?.hourlyRate || 1)).toFixed(1) : 0} horas = R$ {calculatedPrice.toFixed(2)}
+                  💡 <strong>Cálculo Automático:</strong> R$ {selectedCourt?.price || 0} por hora × {calculatedPrice > 0 ? (calculatedPrice / (selectedCourt?.price || 1)).toFixed(1) : 0} horas = R$ {calculatedPrice.toFixed(2)}
                 </Text>
               </div>
             )}

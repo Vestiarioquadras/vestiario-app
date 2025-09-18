@@ -90,3 +90,7 @@ const calculateTotalPrice = (startTime, endTime, hourlyRate) => {
 - ✅ **Calculado automaticamente** em tempo real
 - ✅ **Não pode ser editado** manualmente pelo jogador
 
+
+
+
+

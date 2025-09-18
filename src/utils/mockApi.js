@@ -464,6 +464,11 @@ export const mockScheduleData = [
 export const mockGetScheduleData = async (date = '2024-01-15', courtId = null) => {
   await new Promise(resolve => setTimeout(resolve, 500))
   
+  // Se a data for diferente de 2024-01-15, gera dados dinâmicos
+  if (date !== '2024-01-15') {
+    return generateScheduleForDate(date, courtId)
+  }
+  
   let filteredData = mockScheduleData.filter(item => item.date === date)
   
   if (courtId) {
@@ -474,6 +479,67 @@ export const mockGetScheduleData = async (date = '2024-01-15', courtId = null) =
 }
 
 /**
+ * Gera dados de agenda para uma data específica
+ * @param {string} date - Data para gerar (YYYY-MM-DD)
+ * @param {number} courtId - ID da quadra (opcional)
+ * @returns {Array} Dados da agenda gerados
+ */
+const generateScheduleForDate = (date, courtId = null) => {
+  const courts = [
+    { id: 1, name: 'Quadra 1 - Futebol' },
+    { id: 2, name: 'Quadra 2 - Basquete' },
+    { id: 3, name: 'Quadra 3 - Vôlei' }
+  ]
+  
+  const timeSlots = [
+    '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
+    '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
+  ]
+  
+  const generateTimeSlot = (time) => {
+    const random = Math.random()
+    if (random < 0.3) {
+      // 30% chance de estar reservado
+      return {
+        time,
+        status: 'booked',
+        bookingId: Math.floor(Math.random() * 100) + 1,
+        clientName: ['João Silva', 'Maria Santos', 'Pedro Costa', 'Ana Lima', 'Carlos Mendes'][Math.floor(Math.random() * 5)]
+      }
+    } else if (random < 0.4) {
+      // 10% chance de estar bloqueado
+      return {
+        time,
+        status: 'blocked',
+        bookingId: null,
+        reason: ['Manutenção', 'Limpeza', 'Evento especial', 'Reparo'][Math.floor(Math.random() * 4)]
+      }
+    } else {
+      // 60% chance de estar disponível
+      return {
+        time,
+        status: 'available',
+        bookingId: null
+      }
+    }
+  }
+  
+  let result = courts.map(court => ({
+    id: court.id,
+    courtId: court.id,
+    courtName: court.name,
+    date,
+    timeSlots: timeSlots.map(generateTimeSlot)
+  }))
+  
+  if (courtId) {
+    result = result.filter(item => item.courtId === courtId)
+  }
+  
+  return result
+}
+
+/**
  * Simula bloqueio de horário
  * @param {Object} blockData - Dados do bloqueio
  * @returns {Promise<Object>} Resultado do bloqueio
@@ -481,10 +547,37 @@ export const mockGetScheduleData = async (date = '2024-01-15', courtId = null) =
 export const mockBlockTimeSlot = async (blockData) => {
   await new Promise(resolve => setTimeout(resolve, 800))
   
-  // Simula bloqueio de horário
-  return {
-    success: true,
-    message: 'Horário bloqueado com sucesso!'
+  try {
+    // Atualiza os dados mock
+    const { courtId, timeSlot, reason, date } = blockData
+    
+    // Procura o item na agenda
+    const scheduleItem = mockScheduleData.find(item => 
+      item.courtId === courtId && item.date === date
+    )
+    
+    if (scheduleItem) {
+      // Atualiza o timeSlot específico
+      const timeSlotIndex = scheduleItem.timeSlots.findIndex(slot => slot.time === timeSlot)
+      if (timeSlotIndex !== -1) {
+        scheduleItem.timeSlots[timeSlotIndex] = {
+          time: timeSlot,
+          status: 'blocked',
+          bookingId: null,
+          reason: reason
+        }
+      }
+    }
+    
+    return {
+      success: true,
+      message: 'Horário bloqueado com sucesso!'
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Erro ao bloquear horário'
+    }
   }
 }
 
@@ -559,6 +652,86 @@ export const mockMatchHistory = [
     score: '6-4, 6-2',
     duration: 60,
     price: 80
+  },
+  {
+    id: 4,
+    userId: 1,
+    courtId: 3,
+    courtName: 'Quadra Padel 1',
+    establishmentName: 'Centro Esportivo Paulista',
+    sport: 'padel',
+    date: '2024-01-08',
+    startTime: '16:00',
+    endTime: '18:00',
+    players: ['João Silva', 'Roberto Alves', 'Maria Santos', 'Ana Lima'],
+    result: 'Vitória',
+    score: '6-2, 6-4',
+    duration: 120,
+    price: 100
+  },
+  {
+    id: 5,
+    userId: 1,
+    courtId: 1,
+    courtName: 'Quadra 1 - Futebol',
+    establishmentName: 'Quadras São Paulo',
+    sport: 'futebol',
+    date: '2024-01-06',
+    startTime: '19:00',
+    endTime: '21:00',
+    players: ['João Silva', 'Carlos Mendes', 'Pedro Costa', 'Fernanda Costa'],
+    result: 'Derrota',
+    score: '2-4',
+    duration: 120,
+    price: 150
+  },
+  {
+    id: 6,
+    userId: 1,
+    courtId: 2,
+    courtName: 'Quadra 2 - Basquete',
+    establishmentName: 'Quadras São Paulo',
+    sport: 'basquete',
+    date: '2024-01-04',
+    startTime: '20:00',
+    endTime: '22:00',
+    players: ['João Silva', 'Maria Santos', 'Roberto Alves', 'Ana Lima'],
+    result: 'Vitória',
+    score: '58-45',
+    duration: 120,
+    price: 120
+  },
+  {
+    id: 7,
+    userId: 1,
+    courtId: 4,
+    courtName: 'Quadra Tênis 1',
+    establishmentName: 'Centro Esportivo Paulista',
+    sport: 'tênis',
+    date: '2024-01-02',
+    startTime: '18:00',
+    endTime: '19:00',
+    players: ['João Silva', 'Fernanda Costa'],
+    result: 'Derrota',
+    score: '4-6, 2-6',
+    duration: 60,
+    price: 80
+  },
+  {
+    id: 8,
+    userId: 1,
+    courtId: 3,
+    courtName: 'Quadra Padel 1',
+    establishmentName: 'Centro Esportivo Paulista',
+    sport: 'padel',
+    date: '2023-12-30',
+    startTime: '16:00',
+    endTime: '18:00',
+    players: ['João Silva', 'Roberto Alves', 'Maria Santos', 'Ana Lima'],
+    result: 'Vitória',
+    score: '6-1, 6-3',
+    duration: 120,
+    price: 100
   }
 ]
 

@@ -27,6 +27,7 @@ import {
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import { validationConfig } from '../config/validation'
+import { handleLogin as firebaseLogin } from '../services/authService'
 import PrivacyPolicyModal from '../components/PrivacyPolicyModal'
 import Logo from '../components/Logo'
 import useResponsive from '../hooks/useResponsive'
@@ -38,7 +39,7 @@ const { Title, Text, Link } = Typography
  * Implementa autenticação com validação, feedback visual e conformidade LGPD
  */
 const LoginPage = () => {
-  const { login, loading } = useAuth()
+  const { isAuthenticated, role, loading } = useAuth()
   const navigate = useNavigate()
   const { isMobile, isTablet, isDesktop, getConfig } = useResponsive()
   const [form] = Form.useForm()
@@ -112,7 +113,7 @@ const LoginPage = () => {
    * Manipulador do envio do formulário
    * Implementa validação, autenticação e tratamento de erros
    */
-  const handleLogin = async (values) => {
+  const handleLoginSubmit = async (values) => {
     try {
       if (isBlocked) {
         setError('Conta temporariamente bloqueada. Tente novamente mais tarde.')
@@ -125,8 +126,8 @@ const LoginPage = () => {
       // Simula delay de rede para feedback visual
       await new Promise(resolve => setTimeout(resolve, 1000))
 
-      // Chama a função de login do hook de autenticação
-      const result = await login(values.email, values.password)
+      // Chama a função de login do Firebase
+      const result = await firebaseLogin(values.email, values.password)
       
       if (result.success) {
         // Reset tentativas de login
@@ -141,19 +142,13 @@ const LoginPage = () => {
         // Notificação de sucesso
         notification.success({
           message: 'Login realizado com sucesso!',
-          description: `Bem-vindo, ${result.user.name}!`,
+          description: `Bem-vindo, ${result.userData?.name || result.user.email}!`,
           placement: 'topRight',
           duration: 3
         })
         
-        // Redireciona baseado no papel do usuário
-        if (result.user.role === 'player') {
-          navigate('/dashboard/player')
-        } else if (result.user.role === 'court_owner') {
-          navigate('/dashboard/owner')
-        } else {
-          navigate('/dashboard')
-        }
+        // O redirecionamento será feito automaticamente pelo App.jsx
+        // quando o estado de autenticação for atualizado
       } else {
         // Incrementar tentativas de login
         const newAttempts = loginAttempts + 1
@@ -177,29 +172,54 @@ const LoginPage = () => {
     }
   }
 
-  // Configurações responsivas
+  // Configurações responsivas melhoradas
   const containerStyle = {
     minHeight: '100vh',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    padding: isMobile ? '16px' : isTablet ? '20px' : '24px'
+    padding: isMobile ? '16px' : isTablet ? '20px' : '24px',
+    position: 'relative',
+    overflow: 'hidden'
+  }
+
+  // Efeito de partículas no fundo
+  const backgroundStyle = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: `
+      radial-gradient(circle at 20% 80%, rgba(255, 94, 14, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(255, 94, 14, 0.1) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(255, 94, 14, 0.05) 0%, transparent 50%)
+    `,
+    zIndex: 1
   }
 
   const cardStyle = {
     width: '100%',
     maxWidth: isMobile ? '100%' : isTablet ? '450px' : '500px',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
-    borderRadius: '12px'
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    borderRadius: '20px',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backdropFilter: 'blur(10px)',
+    background: 'rgba(255, 255, 255, 0.95)',
+    position: 'relative',
+    zIndex: 2
   }
 
   const cardBodyStyle = {
-    padding: isMobile ? '24px 20px' : isTablet ? '32px 28px' : '40px 32px'
+    padding: isMobile ? '32px 24px' : isTablet ? '40px 32px' : '48px 40px'
   }
 
   return (
     <div style={containerStyle}>
+      {/* Efeito de fundo */}
+      <div style={backgroundStyle} />
+      
       <Card
         style={cardStyle}
         styles={{ body: cardBodyStyle }}
@@ -248,7 +268,7 @@ const LoginPage = () => {
         <Form
           form={form}
           name="login"
-          onFinish={handleLogin}
+          onFinish={handleLoginSubmit}
           layout="vertical"
           size="large"
         >
@@ -309,7 +329,7 @@ const LoginPage = () => {
             </Checkbox>
           </Form.Item>
 
-          <Form.Item style={{ marginBottom: '16px' }}>
+          <Form.Item style={{ marginBottom: '20px' }}>
             <Button
               type="primary"
               htmlType="submit"
@@ -318,9 +338,22 @@ const LoginPage = () => {
               disabled={isBlocked}
               icon={!isSubmitting && !loading ? <UserOutlined /> : null}
               style={{ 
-                height: '48px',
+                height: '52px',
                 fontSize: '16px',
-                fontWeight: 'bold'
+                fontWeight: '600',
+                background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+                border: 'none',
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(255, 94, 14, 0.3)',
+                transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.transform = 'translateY(-2px)'
+                e.target.style.boxShadow = '0 6px 16px rgba(255, 94, 14, 0.4)'
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.transform = 'translateY(0)'
+                e.target.style.boxShadow = '0 4px 12px rgba(255, 94, 14, 0.3)'
               }}
             >
               {isSubmitting ? 'Entrando...' : isBlocked ? 'Conta Bloqueada' : 'Entrar'}
@@ -347,15 +380,16 @@ const LoginPage = () => {
 
         {/* Informações de teste */}
         <div style={{ 
-          marginTop: '24px', 
-          padding: '16px', 
-          background: 'linear-gradient(135deg, #f0f8ff 0%, #e6f7ff 100%)', 
-          borderRadius: '12px',
-          border: '1px solid #91d5ff'
+          marginTop: '32px', 
+          padding: '20px', 
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+          borderRadius: '16px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <InfoCircleOutlined style={{ color: '#ff5e0e', marginRight: '8px' }} />
-            <Text strong style={{ color: '#ff5e0e' }}>Credenciais de Teste</Text>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+            <InfoCircleOutlined style={{ color: '#ff5e0e', marginRight: '8px', fontSize: '16px' }} />
+            <Text strong style={{ color: '#ff5e0e', fontSize: '14px' }}>Credenciais de Teste</Text>
           </div>
           
           <Space direction="vertical" size="small" style={{ width: '100%' }}>
@@ -368,6 +402,13 @@ const LoginPage = () => {
                 <Button 
                   size="small" 
                   type="link"
+                  style={{
+                    color: '#ff5e0e',
+                    fontWeight: '500',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    transition: 'all 0.2s ease'
+                  }}
                   onClick={() => {
                     form.setFieldsValue({
                       email: 'jogador@vestiario.com',
@@ -389,6 +430,13 @@ const LoginPage = () => {
                 <Button 
                   size="small" 
                   type="link"
+                  style={{
+                    color: '#ff5e0e',
+                    fontWeight: '500',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    transition: 'all 0.2s ease'
+                  }}
                   onClick={() => {
                     form.setFieldsValue({
                       email: 'dono@vestiario.com',

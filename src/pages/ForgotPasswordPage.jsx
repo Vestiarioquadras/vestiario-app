@@ -10,7 +10,7 @@ import {
   Avatar,
   Divider
 } from 'antd'
-import { MailOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { MailOutlined, ArrowLeftOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { validationConfig } from '../config/validation'
 import { mockForgotPassword } from '../utils/mockApi'

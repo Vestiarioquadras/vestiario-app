@@ -13,18 +13,20 @@ import {
   Alert,
   Divider,
   Tooltip,
-  Progress
+  Progress,
+  notification
 } from 'antd'
 import { 
   InfoCircleOutlined, 
   UserOutlined, 
   MailOutlined, 
   PhoneOutlined, 
-  LockOutlined 
+  LockOutlined,
+  SafetyOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { validationConfig } from '../config/validation'
-import { mockRegister } from '../utils/mockApi'
+import { handleSignUp } from '../services/authService'
 import Logo from '../components/Logo'
 import { vestiarioGradients, vestiarioStyles } from '../theme/vestiarioTheme'
 import PrivacyPolicyModal from '../components/PrivacyPolicyModal'
@@ -138,8 +140,8 @@ const RegisterPage = () => {
       // Simula delay de rede
       await new Promise(resolve => setTimeout(resolve, 1500))
 
-      // Chama a função mock de registro
-      const result = await mockRegister(values)
+      // Chama a função de cadastro do Firebase
+      const result = await handleSignUp(values.email, values.password, values.role, values.name)
       
       if (result.success) {
         setSuccess(true)
@@ -147,7 +149,7 @@ const RegisterPage = () => {
         // Notificação de sucesso
         notification.success({
           message: 'Conta criada com sucesso!',
-          description: `Bem-vindo ao Vestiário, ${result.user.name}!`,
+          description: `Bem-vindo ao Vestiário, ${values.name}!`,
           placement: 'topRight',
           duration: 4
         })

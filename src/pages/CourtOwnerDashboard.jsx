@@ -53,7 +53,7 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { mockGetSports, mockGetOwnerBookings, mockCourts, mockGetScheduleData, mockBlockTimeSlot, mockGetOwnerStats, mockConfirmBooking, mockCancelBooking } from '../utils/mockApi'
+import { courtsService, sportsService, bookingsService, statsService, scheduleService } from '../services/firestoreService'
 import Logo from '../components/Logo'
 import useResponsive from '../hooks/useResponsive'
 import { vestiarioGradients, vestiarioStyles } from '../theme/vestiarioTheme'
@@ -77,36 +77,106 @@ const CourtOwnerDashboard = () => {
   const [loading, setLoading] = useState(false)
   const [courtModalOpen, setCourtModalOpen] = useState(false)
   const [blockModalOpen, setBlockModalOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState('2024-01-15')
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [selectedCourt, setSelectedCourt] = useState(null)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
+  const [establishmentModalOpen, setEstablishmentModalOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState('agenda')
+  const [editingCourt, setEditingCourt] = useState(null)
+  const [userEstablishment, setUserEstablishment] = useState(null)
+  const [userEstablishments, setUserEstablishments] = useState([])
   const [form] = Form.useForm()
   const [blockForm] = Form.useForm()
   const [settingsForm] = Form.useForm()
+  const [courtForm] = Form.useForm()
+  const [establishmentForm] = Form.useForm()
 
   /**
-   * Carrega dados iniciais
+   * Carrega dados iniciais quando o usuário é carregado
    */
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    if (user?.uid) {
+      loadInitialData()
+    }
+  }, [user?.uid])
 
   const loadInitialData = async () => {
+    if (!user?.uid) {
+      console.log('⏳ Aguardando usuário carregar...')
+      return
+    }
+    
     setLoading(true)
     try {
-      const [sportsData, bookingsData, scheduleData, statsData] = await Promise.all([
-        mockGetSports(),
-        mockGetOwnerBookings(user?.id),
-        mockGetScheduleData(selectedDate),
-        mockGetOwnerStats(user?.id)
+      console.log('🔄 Carregando dados para dono:', user.uid)
+      const [sportsData, bookingsData, scheduleData, statsData, courtsData] = await Promise.all([
+        sportsService.getAllSports(),
+        bookingsService.getOwnerBookings(user.uid),
+        scheduleService.getScheduleData(selectedDate),
+        statsService.getOwnerStats(user.uid),
+        courtsService.getCourtsByOwner(user.uid)
       ])
+      
+      console.log('📊 Dados carregados:', {
+        sports: sportsData.length,
+        bookings: bookingsData.length,
+        schedule: scheduleData.length,
+        courts: courtsData.length,
+        stats: statsData
+      })
+      
       setSports(sportsData)
       setBookings(bookingsData)
       setScheduleData(scheduleData)
       setOwnerStats(statsData)
+      
+      // Carrega o estabelecimento do usuário com todas as quadras
+      if (courtsData.length > 0) {
+        // Calcular estatísticas do estabelecimento
+        const allSports = [...new Set(courtsData.map(court => court.sport))]
+        const averageRating = courtsData.reduce((sum, court) => sum + (court.rating || 0), 0) / courtsData.length
+        const totalCourts = courtsData.length
+        
+        // Usar dados da primeira quadra como base do estabelecimento
+        const firstCourt = courtsData[0]
+        
+        // Criar nome do estabelecimento baseado no nome do usuário ou primeira quadra
+        const establishmentName = user?.displayName 
+          ? `Estabelecimento ${user.displayName}`
+          : firstCourt.establishmentName || 'Meu Estabelecimento'
+        
+        setUserEstablishment({
+          id: user?.uid, // ID do usuário como ID do estabelecimento
+          name: establishmentName,
+          location: firstCourt.location || 'Local não informado',
+          address: firstCourt.address || 'Endereço não informado',
+          phone: firstCourt.phone || '(11) 99999-9999',
+          email: firstCourt.email || user?.email,
+          rating: Math.round(averageRating * 10) / 10, // Rating médio
+          sports: allSports, // Todos os esportes únicos
+          courts: courtsData, // Todas as quadras
+          totalCourts: totalCourts,
+          ownerName: user?.displayName || 'Proprietário'
+        })
+      } else {
+        // Se não há quadras, criar um estabelecimento vazio
+        setUserEstablishment({
+          id: user?.uid,
+          name: 'Meu Estabelecimento',
+          location: 'Local não informado',
+          address: 'Endereço não informado',
+          phone: '(11) 99999-9999',
+          email: user?.email,
+          rating: 0,
+          sports: [],
+          courts: [],
+          totalCourts: 0,
+          ownerName: user?.displayName || 'Proprietário'
+        })
+      }
     } catch (error) {
+      console.error('❌ Erro ao carregar dados:', error)
       message.error('Erro ao carregar dados')
     } finally {
       setLoading(false)
@@ -124,9 +194,10 @@ const CourtOwnerDashboard = () => {
 
   const loadScheduleData = async () => {
     try {
-      const data = await mockGetScheduleData(selectedDate)
+      const data = await scheduleService.getScheduleData(selectedDate)
       setScheduleData(data)
     } catch (error) {
+      console.error('Erro ao carregar agenda:', error)
       message.error('Erro ao carregar agenda')
     }
   }
@@ -144,14 +215,110 @@ const CourtOwnerDashboard = () => {
    */
   const handleAddCourt = async (values) => {
     try {
-      // Simula adição de quadra
+      const newCourt = {
+        name: values.name,
+        sport: values.sport,
+        location: userEstablishment?.location || 'Local não informado',
+        address: userEstablishment?.address || 'Endereço não informado',
+        price: values.hourlyRate || 80.00,
+        description: values.description || 'Quadra de esporte',
+        amenities: values.amenities || ['Vestiário', 'Estacionamento'],
+        ownerId: user?.uid,
+        ownerName: user?.displayName || 'Proprietário',
+        phone: userEstablishment?.phone || '(11) 99999-9999',
+        email: user?.email,
+        images: ['https://via.placeholder.com/400x300?text=' + encodeURIComponent(values.name)],
+        rating: 0,
+        totalReviews: 0,
+        isAvailable: true
+      }
+
+      await courtsService.createCourt(newCourt)
+      
       message.success('Quadra adicionada com sucesso!')
       setCourtModalOpen(false)
-      form.resetFields()
+      courtForm.resetFields()
+      setEditingCourt(null)
+      
+      // Recarregar dados
       loadInitialData()
     } catch (error) {
+      console.error('Erro ao adicionar quadra:', error)
       message.error('Erro ao adicionar quadra')
     }
+  }
+
+  /**
+   * Edita quadra existente
+   */
+  const handleEditCourt = async (values) => {
+    try {
+      if (!editingCourt) {
+        message.error('Quadra não encontrada')
+        return
+      }
+
+      const updatedCourtData = {
+        name: values.name,
+        sport: values.sport,
+        price: values.hourlyRate || editingCourt.price,
+        description: values.description || editingCourt.description,
+        amenities: values.amenities || editingCourt.amenities
+      }
+
+      await courtsService.updateCourt(editingCourt.id, updatedCourtData)
+      
+      message.success('Quadra editada com sucesso!')
+      setCourtModalOpen(false)
+      courtForm.resetFields()
+      setEditingCourt(null)
+      
+      // Recarregar dados
+      loadInitialData()
+    } catch (error) {
+      console.error('Erro ao editar quadra:', error)
+      message.error('Erro ao editar quadra')
+    }
+  }
+
+  /**
+   * Exclui quadra
+   */
+  const handleDeleteCourt = async (courtId) => {
+    try {
+      await courtsService.deleteCourt(courtId)
+      
+      message.success('Quadra excluída com sucesso!')
+      
+      // Recarregar dados para atualizar agenda e lista
+      loadInitialData()
+    } catch (error) {
+      console.error('Erro ao excluir quadra:', error)
+      message.error('Erro ao excluir quadra')
+    }
+  }
+
+  /**
+   * Abre modal para editar quadra
+   */
+  const openEditCourtModal = (court) => {
+    setEditingCourt(court)
+    courtForm.setFieldsValue({
+      name: court.name,
+      sport: court.sport,
+      hourlyRate: court.price,
+      isIndoor: court.isIndoor
+    })
+    setCourtModalOpen(true)
+  }
+
+  /**
+   * Abre modal para adicionar quadra
+   */
+  const openAddCourtModal = () => {
+    setEditingCourt(null)
+    courtForm.resetFields()
+    setCourtModalOpen(true)
   }
 
   /**
@@ -160,6 +327,7 @@ const CourtOwnerDashboard = () => {
   const openBlockModal = (courtId, timeSlot) => {
     setSelectedCourt({ courtId, timeSlot })
     setBlockModalOpen(true)
+    blockForm.resetFields()
   }
 
   /**
@@ -167,26 +335,35 @@ const CourtOwnerDashboard = () => {
    */
   const handleBlockTimeSlot = async (values) => {
     try {
-      const blockData = {
-        courtId: selectedCourt.courtId,
-        timeSlot: selectedCourt.timeSlot,
-        reason: values.reason,
-        date: selectedDate
-      }
-
-      const result = await mockBlockTimeSlot(blockData)
-      if (result.success) {
-        notification.success({
-          message: 'Horário bloqueado!',
-          description: result.message,
+      if (!selectedCourt) {
+        notification.error({
+          message: 'Erro',
+          description: 'Dados do horário não encontrados',
           placement: 'topRight'
         })
-        setBlockModalOpen(false)
-        blockForm.resetFields()
-        loadScheduleData()
-        loadInitialData() // Atualiza também as reservas
+        return
       }
+
+      await scheduleService.blockTimeSlot(
+        selectedCourt.courtId,
+        selectedDate,
+        selectedCourt.timeSlot,
+        values.reason
+      )
+      
+      notification.success({
+        message: 'Horário bloqueado!',
+        description: 'O horário foi bloqueado com sucesso',
+        placement: 'topRight'
+      })
+      setBlockModalOpen(false)
+      blockForm.resetFields()
+      setSelectedCourt(null)
+      
+      // Recarrega os dados da agenda
+      await loadScheduleData()
     } catch (error) {
+      console.error('Erro ao bloquear horário:', error)
       notification.error({
         message: 'Erro ao bloquear horário',
         description: 'Tente novamente',
@@ -200,22 +377,15 @@ const CourtOwnerDashboard = () => {
    */
   const handleConfirmBooking = async (bookingId) => {
     try {
-      const result = await mockConfirmBooking(bookingId)
-      if (result.success) {
-        notification.success({
-          message: 'Reserva confirmada!',
-          description: result.message,
-          placement: 'topRight'
-        })
-        loadInitialData()
-      } else {
-        notification.error({
-          message: 'Erro ao confirmar reserva',
-          description: result.error || 'Tente novamente',
-          placement: 'topRight'
-        })
-      }
+      await bookingsService.confirmBooking(bookingId)
+      notification.success({
+        message: 'Reserva confirmada!',
+        description: 'A reserva foi confirmada com sucesso',
+        placement: 'topRight'
+      })
+      loadInitialData()
     } catch (error) {
+      console.error('Erro ao confirmar reserva:', error)
       notification.error({
         message: 'Erro ao confirmar reserva',
         description: 'Tente novamente',
@@ -229,22 +399,15 @@ const CourtOwnerDashboard = () => {
    */
   const handleCancelBooking = async (bookingId) => {
     try {
-      const result = await mockCancelBooking(bookingId, 'Cancelado pelo dono')
-      if (result.success) {
-        notification.success({
-          message: 'Reserva cancelada!',
-          description: result.message,
-          placement: 'topRight'
-        })
-        loadInitialData()
-      } else {
-        notification.error({
-          message: 'Erro ao cancelar reserva',
-          description: result.error || 'Tente novamente',
-          placement: 'topRight'
-        })
-      }
+      await bookingsService.cancelBooking(bookingId)
+      notification.success({
+        message: 'Reserva cancelada!',
+        description: 'A reserva foi cancelada com sucesso',
+        placement: 'topRight'
+      })
+      loadInitialData()
     } catch (error) {
+      console.error('Erro ao cancelar reserva:', error)
       notification.error({
         message: 'Erro ao cancelar reserva',
         description: 'Tente novamente',
@@ -279,6 +442,33 @@ const CourtOwnerDashboard = () => {
         description: 'Tente novamente',
         placement: 'topRight'
       })
+    }
+  }
+
+  /**
+   * Salva informações do estabelecimento
+   */
+  const handleSaveEstablishment = async (values) => {
+    try {
+      // Atualizar o estabelecimento localmente
+      const updatedEstablishment = {
+        ...userEstablishment,
+        name: values.name,
+        address: values.address,
+        phone: values.phone,
+        email: values.email
+      }
+      
+      setUserEstablishment(updatedEstablishment)
+      
+      // TODO: Implementar salvamento no Firebase
+      // await establishmentsService.updateEstablishment(userEstablishment.id, values)
+      
+      message.success('Estabelecimento atualizado com sucesso!')
+      setEstablishmentModalOpen(false)
+    } catch (error) {
+      console.error('Erro ao salvar estabelecimento:', error)
+      message.error('Erro ao salvar estabelecimento')
     }
   }
 
@@ -362,8 +552,7 @@ const CourtOwnerDashboard = () => {
     }
   }
 
-  // Encontra o estabelecimento do usuário atual
-  const userEstablishment = mockCourts.find(court => court.ownerName === user?.name)
+  // userEstablishment agora é um estado gerenciado
 
   const columns = [
     {
@@ -387,10 +576,10 @@ const CourtOwnerDashboard = () => {
       key: 'datetime',
       render: (_, record) => (
         <div>
-          <Text>{new Date(record.startTime).toLocaleDateString('pt-BR')}</Text>
+          <Text>{record.date ? record.date.split('-').reverse().join('/') : 'Data não informada'}</Text>
           <br />
           <Text type="secondary">
-            {new Date(record.startTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} - {new Date(record.endTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            {record.time || 'Horário não informado'}
           </Text>
         </div>
       )
@@ -441,52 +630,142 @@ const CourtOwnerDashboard = () => {
     <Layout style={{ minHeight: '100vh' }}>
       {/* Header */}
       <Header style={{ 
-        background: '#fff', 
-        padding: '0 24px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        background: 'linear-gradient(135deg, #ffffff 0%, #fafbfc 100%)', 
+        padding: isMobile ? '0 16px' : '0 24px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        height: isMobile ? '64px' : '72px',
+        borderBottom: '1px solid #e5e7eb',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000
       }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Logo size="small" style={{ marginRight: '16px' }} />
+          <Logo size={isMobile ? "small" : "medium"} style={{ marginRight: isMobile ? '12px' : '20px' }} />
           <div>
-            <Title level={4} style={{ margin: 0, color: '#52c41a' }}>
+            <Title level={4} style={{ 
+              margin: 0, 
+              color: '#10b981',
+              fontWeight: '600',
+              fontSize: isMobile ? '16px' : '20px',
+              lineHeight: 1.2
+            }}>
               Dashboard do Dono
             </Title>
-            <Text type="secondary">
+            <Text type="secondary" style={{ 
+              fontSize: isMobile ? '12px' : '14px',
+              lineHeight: 1.2,
+              display: 'block'
+            }}>
               Olá, {user?.name || user?.email}!
             </Text>
           </div>
         </div>
         
-        <Space>
-          <Button icon={<SettingOutlined />} onClick={openSettings}>
-            Configurações
-          </Button>
+        <Space size={isMobile ? 'small' : 'middle'}>
+          {!isMobile && (
+            <Button 
+              icon={<SettingOutlined />} 
+              onClick={openSettings}
+              style={{
+                borderRadius: '8px',
+                fontWeight: '500',
+                height: isMobile ? '36px' : '40px'
+              }}
+            >
+              Configurações
+            </Button>
+          )}
           <Button 
             type="primary" 
             danger 
             icon={<LogoutOutlined />}
             onClick={handleLogout}
+            size={isMobile ? "small" : "middle"}
+            style={{
+              borderRadius: '8px',
+              fontWeight: '500',
+              height: isMobile ? '36px' : '40px',
+              paddingInline: isMobile ? '12px' : '16px'
+            }}
           >
-            Sair
+            {isMobile ? 'Sair' : 'Sair'}
           </Button>
         </Space>
       </Header>
 
       {/* Conteúdo Principal */}
-      <Content style={{ padding: '24px', background: '#f5f5f5' }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+      <Content style={{ 
+        padding: isMobile ? '20px 16px' : isTablet ? '24px 20px' : '32px 24px', 
+        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+        minHeight: 'calc(100vh - 72px)'
+      }}>
+        <div style={{ 
+          maxWidth: '1400px', 
+          margin: '0 auto'
+        }}>
           {/* Boas-vindas */}
-          <Card style={{ marginBottom: '24px', background: 'linear-gradient(135deg, #f6ffed 0%, #d9f7be 100%)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-              <Logo size="medium" style={{ marginRight: '16px' }} />
+          <Card style={{ 
+            marginBottom: isMobile ? '20px' : '32px', 
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            border: 'none',
+            color: 'white',
+            borderRadius: '20px',
+            boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.3), 0 4px 6px -2px rgba(16, 185, 129, 0.1)',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            {/* Efeito de fundo decorativo */}
+            <div style={{
+              position: 'absolute',
+              top: '-50%',
+              right: '-20%',
+              width: '200px',
+              height: '200px',
+              background: 'rgba(255, 255, 255, 0.1)',
+              borderRadius: '50%',
+              zIndex: 1
+            }} />
+            <div style={{
+              position: 'absolute',
+              bottom: '-30%',
+              left: '-10%',
+              width: '150px',
+              height: '150px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              borderRadius: '50%',
+              zIndex: 1
+            }} />
+            
+            <div style={{ 
+              display: 'flex', 
+              alignItems: isMobile ? 'flex-start' : 'center', 
+              marginBottom: '16px',
+              flexDirection: isMobile ? 'column' : 'row',
+              textAlign: isMobile ? 'center' : 'left',
+              position: 'relative',
+              zIndex: 2
+            }}>
+              <Logo size={isMobile ? "medium" : "large"} style={{ 
+                marginRight: isMobile ? '0' : '20px',
+                marginBottom: isMobile ? '12px' : '0',
+                filter: 'brightness(0) invert(1)'
+              }} />
               <div>
-                <Title level={2} style={{ margin: 0, color: '#52c41a' }}>
+                <Title level={isMobile ? 3 : 2} style={{ 
+                  margin: 0, 
+                  color: 'white', 
+                  fontWeight: '600' 
+                }}>
                   Gerencie suas Quadras! 🏟️
                 </Title>
-                <Text style={{ fontSize: '16px' }}>
+                <Text style={{ 
+                  fontSize: isMobile ? '14px' : '16px',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontWeight: '400'
+                }}>
                   Controle suas reservas, gerencie suas quadras e acompanhe sua receita.
                 </Text>
               </div>
@@ -494,9 +773,14 @@ const CourtOwnerDashboard = () => {
           </Card>
 
           {/* Estatísticas Principais */}
-          <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+          <Row gutter={[16, 16]} style={{ marginBottom: isMobile ? '20px' : '32px' }}>
             <Col xs={24} sm={12} md={6}>
-              <Card>
+              <Card style={{
+                borderRadius: '16px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #e5e7eb',
+                transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
+              }}>
                 <Statistic
                   title="Total de Quadras"
                   value={ownerStats.totalCourts || 0}
@@ -506,7 +790,12 @@ const CourtOwnerDashboard = () => {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card>
+              <Card style={{
+                borderRadius: '16px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #e5e7eb',
+                transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
+              }}>
                 <Statistic
                   title="Reservas Hoje"
                   value={ownerStats.bookingsToday || 0}
@@ -516,7 +805,12 @@ const CourtOwnerDashboard = () => {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card>
+              <Card style={{
+                borderRadius: '16px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #e5e7eb',
+                transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
+              }}>
                 <Statistic
                   title="Receita do Mês"
                   value={ownerStats.monthlyRevenue || 0}
@@ -527,7 +821,12 @@ const CourtOwnerDashboard = () => {
               </Card>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Card>
+              <Card style={{
+                borderRadius: '16px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                border: '1px solid #e5e7eb',
+                transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
+              }}>
                 <Statistic
                   title="Taxa de Ocupação"
                   value={ownerStats.occupancyRate || 0}
@@ -611,7 +910,7 @@ const CourtOwnerDashboard = () => {
                     onChange={(value) => setSelectedCourt(value)}
                   >
                     <Option value={null}>Todas as quadras</Option>
-                    {userEstablishment?.courts.map(court => (
+                    {userEstablishment?.courts && userEstablishment.courts.length > 0 && userEstablishment.courts.map(court => (
                       <Option key={court.id} value={court.id}>
                         {court.name}
                       </Option>
@@ -650,7 +949,9 @@ const CourtOwnerDashboard = () => {
           {/* AGENDA POR QUADRA */}
           <Card title="📅 Agenda do Dia" style={{ marginBottom: '24px' }}>
             <Row gutter={[16, 16]}>
-              {scheduleData.map(court => (
+              {scheduleData && scheduleData.length > 0 ? scheduleData
+                .filter(court => !selectedCourt || court.courtId === selectedCourt)
+                .map(court => (
                 <Col xs={24} lg={8} key={court.courtId}>
                   <Card 
                     size="small"
@@ -680,7 +981,7 @@ const CourtOwnerDashboard = () => {
                       maxHeight: '400px',
                       overflowY: 'auto'
                     }}>
-                      {court.timeSlots.map((timeSlot, index) => (
+                      {court.timeSlots && court.timeSlots.map((timeSlot, index) => (
                         <div key={index}>
                           {renderTimeSlot(timeSlot, court.courtId)}
                         </div>
@@ -688,13 +989,40 @@ const CourtOwnerDashboard = () => {
                     </div>
                   </Card>
                 </Col>
-              ))}
+              )) : (
+                <Col span={24}>
+                  <Empty 
+                    description="Nenhum horário disponível para esta data"
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                </Col>
+              )}
             </Row>
           </Card>
 
           {/* Informações do Estabelecimento */}
           {userEstablishment && (
-            <Card title="Meu Estabelecimento" style={{ marginBottom: '24px' }}>
+            <Card 
+              title="🏢 Meu Estabelecimento" 
+              extra={
+                <Button 
+                  size="small" 
+                  icon={<EditOutlined />} 
+                  onClick={() => {
+                    establishmentForm.setFieldsValue({
+                      name: userEstablishment?.name,
+                      address: userEstablishment?.address,
+                      phone: userEstablishment?.phone,
+                      email: userEstablishment?.email
+                    })
+                    setEstablishmentModalOpen(true)
+                  }}
+                >
+                  Editar
+                </Button>
+              }
+              style={{ marginBottom: '24px' }}
+            >
               <Row gutter={[16, 16]}>
                 <Col xs={24} md={12}>
                   <div>
@@ -722,12 +1050,16 @@ const CourtOwnerDashboard = () => {
                   <div>
                     <Text strong>Esportes oferecidos:</Text>
                     <div style={{ marginTop: '8px' }}>
-                      {userEstablishment.sports.map(sport => (
+                      {userEstablishment.sports && userEstablishment.sports.length > 0 ? userEstablishment.sports.map(sport => (
                         <Tag key={sport} color="blue" style={{ margin: '2px' }}>
                           {sport}
                         </Tag>
-                      ))}
+                      )) : (
+                        <Text type="secondary">Nenhum esporte cadastrado</Text>
+                      )}
                     </div>
+                    <br />
+                    <Text strong>Total de quadras:</Text> {userEstablishment.totalCourts}
                   </div>
                 </Col>
               </Row>
@@ -741,14 +1073,14 @@ const CourtOwnerDashboard = () => {
               <Button 
                 type="primary" 
                 icon={<PlusOutlined />}
-                onClick={() => setCourtModalOpen(true)}
+                onClick={openAddCourtModal}
               >
                 Adicionar Quadra
               </Button>
             }
             style={{ marginBottom: '24px' }}
           >
-            {userEstablishment && (
+            {userEstablishment && userEstablishment.courts && userEstablishment.courts.length > 0 ? (
               <Row gutter={[16, 16]}>
                 {userEstablishment.courts.map(court => (
                   <Col xs={24} sm={12} md={8} key={court.id}>
@@ -757,17 +1089,43 @@ const CourtOwnerDashboard = () => {
                       title={court.name}
                       extra={
                         <Space>
-                          <Button size="small" icon={<EditOutlined />} />
-                          <Button size="small" danger icon={<DeleteOutlined />} />
+                          <Button 
+                            size="small" 
+                            icon={<EditOutlined />} 
+                            onClick={() => openEditCourtModal(court)}
+                            title="Editar quadra"
+                          />
+                          <Button 
+                            size="small" 
+                            danger 
+                            icon={<DeleteOutlined />} 
+                            onClick={() => {
+                              Modal.confirm({
+                                title: 'Excluir quadra',
+                                content: `Tem certeza que deseja excluir a quadra "${court.name}"?`,
+                                okText: 'Sim, excluir',
+                                okType: 'danger',
+                                cancelText: 'Cancelar',
+                                onOk: () => handleDeleteCourt(court.id)
+                              })
+                            }}
+                            title="Excluir quadra"
+                          />
                         </Space>
                       }
                     >
                       <div>
                         <Text strong>Esporte:</Text> <Tag color="blue">{court.sport}</Tag>
                         <br />
-                        <Text strong>Preço:</Text> R$ {court.hourlyRate}/hora
+                        <Text strong>Preço:</Text> R$ {court.price || 0}/hora
                         <br />
                         <Text strong>Tipo:</Text> {court.isIndoor ? 'Coberta' : 'Descoberta'}
+                        <br />
+                        <Text strong>Endereço:</Text> {court.address || 'Não informado'}
+                        <br />
+                        <Text strong>Telefone:</Text> {court.phone || 'Não informado'}
+                        <br />
+                        <Text strong>Rating:</Text> ⭐ {court.rating || 0}/5.0
                         <br />
                         <Text strong>Status:</Text> 
                         <Badge 
@@ -780,6 +1138,11 @@ const CourtOwnerDashboard = () => {
                   </Col>
                 ))}
               </Row>
+            ) : (
+              <Empty 
+                description="Nenhuma quadra cadastrada"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+              />
             )}
           </Card>
 
@@ -788,12 +1151,12 @@ const CourtOwnerDashboard = () => {
             {isMobile ? (
               // Layout mobile com cards
               <div>
-                {bookings.map(booking => (
+                {bookings && bookings.length > 0 ? bookings.map(booking => (
                   <Card 
                     key={booking.id} 
                     size="small" 
                     style={{ marginBottom: '12px' }}
-                    title={`${booking.courtName} - ${new Date(booking.date).toLocaleDateString('pt-BR')}`}
+                    title={`${booking.courtName} - ${booking.date ? booking.date.split('-').reverse().join('/') : 'Data não informada'}`}
                   >
                     <div style={{ fontSize: '14px' }}>
                       <div><strong>👤</strong> {booking.playerName}</div>
@@ -828,7 +1191,12 @@ const CourtOwnerDashboard = () => {
                       </div>
                     </div>
                   </Card>
-                ))}
+                )) : (
+                  <Empty 
+                    description="Nenhuma reserva encontrada"
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )}
               </div>
             ) : (
               // Layout desktop com tabela
@@ -843,18 +1211,22 @@ const CourtOwnerDashboard = () => {
           </Card>
         </div>
 
-        {/* Modal para Adicionar Quadra */}
+        {/* Modal para Adicionar/Editar Quadra */}
         <Modal
-          title="Adicionar Nova Quadra"
+          title={editingCourt ? "Editar Quadra" : "Adicionar Nova Quadra"}
           open={courtModalOpen}
-          onCancel={() => setCourtModalOpen(false)}
+          onCancel={() => {
+            setCourtModalOpen(false)
+            setEditingCourt(null)
+            courtForm.resetFields()
+          }}
           footer={null}
           width={600}
         >
           <Form
-            form={form}
+            form={courtForm}
             layout="vertical"
-            onFinish={handleAddCourt}
+            onFinish={editingCourt ? handleEditCourt : handleAddCourt}
           >
             <Form.Item
               name="name"
@@ -870,7 +1242,7 @@ const CourtOwnerDashboard = () => {
               rules={[{ required: true, message: 'Selecione o esporte!' }]}
             >
               <Select placeholder="Selecione o esporte">
-                {sports.map(sport => (
+                {sports && sports.length > 0 && sports.map(sport => (
                   <Option key={sport.id} value={sport.name}>
                     {sport.icon} {sport.name}
                   </Option>
@@ -908,11 +1280,15 @@ const CourtOwnerDashboard = () => {
 
             <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
               <Space>
-                <Button onClick={() => setCourtModalOpen(false)}>
+                <Button onClick={() => {
+                  setCourtModalOpen(false)
+                  setEditingCourt(null)
+                  courtForm.resetFields()
+                }}>
                   Cancelar
                 </Button>
                 <Button type="primary" htmlType="submit">
-                  Adicionar Quadra
+                  {editingCourt ? 'Salvar Alterações' : 'Adicionar Quadra'}
                 </Button>
               </Space>
             </Form.Item>
@@ -930,7 +1306,7 @@ const CourtOwnerDashboard = () => {
           <div style={{ marginBottom: '16px', padding: '16px', background: '#f0f8ff', borderRadius: '8px' }}>
             <Text strong>Horário selecionado:</Text>
             <br />
-            <Text>{selectedCourt?.timeSlot} - {new Date(selectedDate).toLocaleDateString('pt-BR')}</Text>
+            <Text>{selectedCourt?.timeSlot} - {selectedDate ? selectedDate.split('-').reverse().join('/') : 'Data não informada'}</Text>
           </div>
 
           <Form
@@ -1046,6 +1422,76 @@ const CourtOwnerDashboard = () => {
                 </Button>
                 <Button type="primary" htmlType="submit">
                   💾 Salvar Configurações
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Modal para Editar Estabelecimento */}
+        <Modal
+          title="🏢 Editar Estabelecimento"
+          open={establishmentModalOpen}
+          onCancel={() => setEstablishmentModalOpen(false)}
+          footer={null}
+          width={600}
+        >
+          <Form
+            form={establishmentForm}
+            layout="vertical"
+            onFinish={handleSaveEstablishment}
+            initialValues={{
+              name: userEstablishment?.name,
+              address: userEstablishment?.address,
+              phone: userEstablishment?.phone,
+              email: userEstablishment?.email
+            }}
+          >
+            <Form.Item
+              name="name"
+              label="Nome do Estabelecimento"
+              rules={[{ required: true, message: 'Digite o nome do estabelecimento!' }]}
+            >
+              <Input placeholder="Ex: Paula Ramos Sports Center" />
+            </Form.Item>
+
+            <Form.Item
+              name="address"
+              label="Endereço"
+              rules={[{ required: true, message: 'Digite o endereço!' }]}
+            >
+              <Input.TextArea 
+                placeholder="Rua das Flores, 123 - Vila Madalena, São Paulo - SP"
+                rows={3}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="phone"
+              label="Telefone"
+              rules={[{ required: true, message: 'Digite o telefone!' }]}
+            >
+              <Input placeholder="(11) 3333-4444" />
+            </Form.Item>
+
+            <Form.Item
+              name="email"
+              label="Email"
+              rules={[
+                { required: true, message: 'Digite o email!' },
+                { type: 'email', message: 'Email inválido!' }
+              ]}
+            >
+              <Input placeholder="contato@paularamos.com" />
+            </Form.Item>
+
+            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+              <Space>
+                <Button onClick={() => setEstablishmentModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="primary" htmlType="submit">
+                  Salvar
                 </Button>
               </Space>
             </Form.Item>

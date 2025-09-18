@@ -9,7 +9,7 @@ import {
   Avatar,
   Divider
 } from 'antd'
-import { LockOutlined, ArrowLeftOutlined } from '@ant-design/icons'
+import { LockOutlined, ArrowLeftOutlined, SafetyOutlined } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { validationConfig } from '../config/validation'
 import { mockResetPassword } from '../utils/mockApi'

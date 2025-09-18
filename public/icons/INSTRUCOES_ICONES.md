@@ -88,3 +88,7 @@ Após seguir estas instruções, o Vestiário terá:
 
 **Nota**: Se a logo não carregar no gerador automático, ele criará ícones com a letra "V" e cores da marca (#ff5e0d).
 
+
+
+
+

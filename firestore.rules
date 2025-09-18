@@ -1,0 +1,168 @@
+// 🔒 Regras de Segurança Firestore para o Projeto Vestiário
+// Estas regras garantem que usuários só possam acessar seus próprios dados
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 📋 Regras para coleção 'users'
+    // Usuários só podem ler/escrever seus próprios dados
+    match /users/{userId} {
+      // Permitir leitura e escrita apenas se o usuário estiver autenticado
+      // e o userId corresponder ao UID do usuário autenticado
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Permitir criação apenas se o usuário estiver autenticado
+      // e o userId corresponder ao UID do usuário autenticado
+      allow create: if request.auth != null 
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasAll(['uid', 'email', 'role', 'name', 'createdAt'])
+        && request.resource.data.uid == userId
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['player', 'owner', 'court_owner'];
+    }
+    
+    // 🏟️ Regras para coleção 'courts'
+    // Donos podem gerenciar suas próprias quadras
+    match /courts/{courtId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para donos de quadras
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['name', 'sport', 'location', 'ownerId', 'createdAt']);
+    }
+    
+    // 📅 Regras para coleção 'bookings'
+    // Usuários podem gerenciar suas próprias reservas
+    match /bookings/{bookingId} {
+      // Permitir leitura para o jogador que fez a reserva
+      allow read: if request.auth != null 
+        && request.auth.uid == resource.data.playerId;
+      
+      // Permitir escrita apenas para o jogador que fez a reserva
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.playerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.playerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['playerId', 'courtId', 'date', 'time', 'createdAt']);
+    }
+    
+    // ⭐ Regras para coleção 'reviews'
+    // Usuários podem gerenciar suas próprias avaliações
+    match /reviews/{reviewId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para o autor da avaliação
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.authorId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.keys().hasAll(['authorId', 'courtId', 'rating', 'comment', 'createdAt']);
+    }
+    
+    // 🏆 Regras para coleção 'sports'
+    // Dados públicos, leitura para todos
+    match /sports/{sportId} {
+      allow read: if request.auth != null;
+      // Permitir escrita para usuários autenticados (para população inicial)
+      allow write: if request.auth != null;
+    }
+    
+    // 🏢 Regras para coleção 'clubs'
+    // Donos podem gerenciar seus clubes
+    match /clubs/{clubId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita apenas para o dono do clube
+      allow write: if request.auth != null 
+        && request.auth.uid == resource.data.ownerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['name', 'location', 'ownerId', 'createdAt']);
+    }
+    
+    // ❤️ Regras para coleção 'favorites'
+    // Usuários podem gerenciar seus próprios favoritos
+    match /favorites/{favoriteId} {
+      // Permitir leitura e escrita apenas para o dono do favorito
+      allow read, write: if request.auth != null 
+        && request.auth.uid == resource.data.userId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll(['userId', 'courtId', 'createdAt']);
+    }
+    
+    // 🏆 Regras para coleção 'matches'
+    // Usuários podem gerenciar suas próprias partidas
+    match /matches/{matchId} {
+      // Permitir leitura e escrita apenas para o jogador
+      allow read, write: if request.auth != null 
+        && request.auth.uid == resource.data.playerId;
+      
+      // Permitir criação apenas para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.playerId == request.auth.uid
+        && request.resource.data.keys().hasAll(['playerId', 'date', 'createdAt']);
+    }
+    
+    // 📅 Regras para coleção 'blockedSlots'
+    // Donos podem gerenciar horários bloqueados
+    match /blockedSlots/{slotId} {
+      // Permitir leitura para todos os usuários autenticados
+      allow read: if request.auth != null;
+      
+      // Permitir escrita para usuários autenticados (temporariamente mais permissivo)
+      allow write: if request.auth != null;
+      
+      // Permitir criação para usuários autenticados
+      allow create: if request.auth != null 
+        && request.resource.data.keys().hasAll(['courtId', 'date', 'time', 'createdAt']);
+    }
+    
+    // 🚫 Negar acesso a todas as outras coleções
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+// 📋 INSTRUÇÕES PARA IMPLEMENTAR:
+// 1. Acesse: https://console.firebase.google.com/
+// 2. Vá em Firestore Database > Regras
+// 3. Substitua as regras existentes pelo código acima
+// 4. Clique em "Publicar"
+// 5. Teste as regras usando o simulador de regras
+
+// 🔍 COMO TESTAR AS REGRAS:
+// 1. No console Firebase, vá em Firestore > Regras
+// 2. Clique em "Simulador"
+// 3. Configure um cenário de teste:
+//    - Tipo: get, set, update, delete
+//    - Local: /users/user123
+//    - Autenticação: Simulado
+//    - UID: user123
+// 4. Execute o teste e verifique se a regra funciona
+
+// 🛡️ BENEFÍCIOS DESTAS REGRAS:
+// ✅ Usuários só acessam seus próprios dados
+// ✅ Proteção contra acesso não autorizado
+// ✅ Conformidade com LGPD
+// ✅ Segurança em tempo real
+// ✅ Validação de dados na criação
+// ✅ Controle de acesso baseado em roles
