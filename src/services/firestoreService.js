@@ -35,9 +35,12 @@ export const courtsService = {
       
       // Aplicar filtros localmente
       if (sport) {
-        courts = courts.filter(court => 
-          court.sport && court.sport.toLowerCase().includes(sport.toLowerCase())
-        );
+        const sportLc = sport.toLowerCase();
+        courts = courts.filter(court => {
+          const singleMatch = court.sport && String(court.sport).toLowerCase().includes(sportLc);
+          const multiMatch = Array.isArray(court.sports) && court.sports.some(s => String(s).toLowerCase().includes(sportLc));
+          return singleMatch || multiMatch;
+        });
         console.log(`🏆 Após filtro de esporte (${sport}): ${courts.length} quadras`);
       }
       
@@ -95,13 +98,23 @@ export const courtsService = {
   // Criar nova quadra
   async createCourt(courtData) {
     try {
+      // Compatibilidade: garantir ambos os campos (sport e sports)
+      const normalizedData = { ...courtData };
+      if (Array.isArray(normalizedData.sports)) {
+        if (!normalizedData.sport && normalizedData.sports.length > 0) {
+          normalizedData.sport = normalizedData.sports[0];
+        }
+      } else if (normalizedData.sport) {
+        normalizedData.sports = [normalizedData.sport];
+      }
+
       const docRef = await addDoc(collection(db, 'courts'), {
-        ...courtData,
+        ...normalizedData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       console.log('✅ Quadra criada com sucesso:', docRef.id);
-      return { id: docRef.id, ...courtData };
+      return { id: docRef.id, ...normalizedData };
     } catch (error) {
       console.error('❌ Erro ao criar quadra:', error);
       throw error;
@@ -112,12 +125,20 @@ export const courtsService = {
   async updateCourt(courtId, updateData) {
     try {
       const courtRef = doc(db, 'courts', courtId);
+      // Compatibilidade: garantir ambos os campos (sport e sports)
+      const normalizedData = { ...updateData };
+      if (Array.isArray(normalizedData.sports)) {
+        normalizedData.sport = normalizedData.sports[0] || null;
+      } else if (normalizedData.sport) {
+        normalizedData.sports = [normalizedData.sport];
+      }
+
       await updateDoc(courtRef, {
-        ...updateData,
+        ...normalizedData,
         updatedAt: serverTimestamp()
       });
       console.log('✅ Quadra atualizada com sucesso:', courtId);
-      return { id: courtId, ...updateData };
+      return { id: courtId, ...normalizedData };
     } catch (error) {
       console.error('❌ Erro ao atualizar quadra:', error);
       throw error;
@@ -162,7 +183,10 @@ export const sportsService = {
         { id: 'basquete', name: 'Basquete', icon: '🏀' },
         { id: 'tenis', name: 'Tênis', icon: '🎾' },
         { id: 'padel', name: 'Padel', icon: '🏓' },
-        { id: 'volei', name: 'Vôlei', icon: '🏐' }
+        { id: 'volei', name: 'Vôlei', icon: '🏐' },
+        { id: 'beach-tennis', name: 'Beach Tennis', icon: '🏖️' },
+        { id: 'volei-de-areia', name: 'Vôlei de areia', icon: '🏐' },
+        { id: 'futvolei', name: 'Futvôlei', icon: '⚽' }
       ];
     }
   }
@@ -356,7 +380,7 @@ export const favoritesService = {
             createdAt: favoriteData.createdAt,
             courtName: courtData.name,
             establishmentName: courtData.establishmentName || 'Estabelecimento Teste',
-            sport: courtData.sport,
+            sport: courtData.sport || (Array.isArray(courtData.sports) ? courtData.sports[0] : undefined),
             price: courtData.price,
             isIndoor: courtData.isIndoor,
             rating: courtData.rating

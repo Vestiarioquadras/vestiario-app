@@ -134,7 +134,7 @@ const CourtOwnerDashboard = () => {
       // Carrega o estabelecimento do usuário com todas as quadras
       if (courtsData.length > 0) {
         // Calcular estatísticas do estabelecimento
-        const allSports = [...new Set(courtsData.map(court => court.sport))]
+        const allSports = [...new Set(courtsData.flatMap(court => (Array.isArray(court.sports) ? court.sports : [court.sport]).filter(Boolean)))]
         const averageRating = courtsData.reduce((sum, court) => sum + (court.rating || 0), 0) / courtsData.length
         const totalCourts = courtsData.length
         
@@ -217,7 +217,9 @@ const CourtOwnerDashboard = () => {
     try {
       const newCourt = {
         name: values.name,
-        sport: values.sport,
+        sport: Array.isArray(values.sports) && values.sports.length > 0 ? values.sports[0] : values.sport,
+        sports: Array.isArray(values.sports) ? values.sports : (values.sport ? [values.sport] : []),
+        isIndoor: values.isIndoor,
         location: userEstablishment?.location || 'Local não informado',
         address: userEstablishment?.address || 'Endereço não informado',
         price: values.hourlyRate || 80.00,
@@ -260,7 +262,9 @@ const CourtOwnerDashboard = () => {
 
       const updatedCourtData = {
         name: values.name,
-        sport: values.sport,
+        sport: Array.isArray(values.sports) && values.sports.length > 0 ? values.sports[0] : values.sport,
+        sports: Array.isArray(values.sports) ? values.sports : (values.sport ? [values.sport] : editingCourt.sports || []),
+        isIndoor: values.isIndoor,
         price: values.hourlyRate || editingCourt.price,
         description: values.description || editingCourt.description,
         amenities: values.amenities || editingCourt.amenities
@@ -306,6 +310,7 @@ const CourtOwnerDashboard = () => {
     courtForm.setFieldsValue({
       name: court.name,
       sport: court.sport,
+      sports: Array.isArray(court.sports) ? court.sports : (court.sport ? [court.sport] : []),
       hourlyRate: court.price,
       isIndoor: court.isIndoor
     })
@@ -706,71 +711,7 @@ const CourtOwnerDashboard = () => {
           maxWidth: '1400px', 
           margin: '0 auto'
         }}>
-          {/* Boas-vindas */}
-          <Card style={{ 
-            marginBottom: isMobile ? '20px' : '32px', 
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            border: 'none',
-            color: 'white',
-            borderRadius: '20px',
-            boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.3), 0 4px 6px -2px rgba(16, 185, 129, 0.1)',
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            {/* Efeito de fundo decorativo */}
-            <div style={{
-              position: 'absolute',
-              top: '-50%',
-              right: '-20%',
-              width: '200px',
-              height: '200px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            <div style={{
-              position: 'absolute',
-              bottom: '-30%',
-              left: '-10%',
-              width: '150px',
-              height: '150px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            
-            <div style={{ 
-              display: 'flex', 
-              alignItems: isMobile ? 'flex-start' : 'center', 
-              marginBottom: '16px',
-              flexDirection: isMobile ? 'column' : 'row',
-              textAlign: isMobile ? 'center' : 'left',
-              position: 'relative',
-              zIndex: 2
-            }}>
-              <Logo size={isMobile ? "medium" : "large"} style={{ 
-                marginRight: isMobile ? '0' : '20px',
-                marginBottom: isMobile ? '12px' : '0',
-                filter: 'brightness(0) invert(1)'
-              }} />
-              <div>
-                <Title level={isMobile ? 3 : 2} style={{ 
-                  margin: 0, 
-                  color: 'white', 
-                  fontWeight: '600' 
-                }}>
-                  Gerencie suas Quadras! 🏟️
-                </Title>
-                <Text style={{ 
-                  fontSize: isMobile ? '14px' : '16px',
-                  color: 'rgba(255, 255, 255, 0.9)',
-                  fontWeight: '400'
-                }}>
-                  Controle suas reservas, gerencie suas quadras e acompanhe sua receita.
-                </Text>
-              </div>
-            </div>
-          </Card>
+          {/* seção de boas-vindas removida */}
 
           {/* Estatísticas Principais */}
           <Row gutter={[16, 16]} style={{ marginBottom: isMobile ? '20px' : '32px' }}>
@@ -1115,7 +1056,10 @@ const CourtOwnerDashboard = () => {
                       }
                     >
                       <div>
-                        <Text strong>Esporte:</Text> <Tag color="blue">{court.sport}</Tag>
+                        <Text strong>Esportes:</Text>{' '}
+                        {(Array.isArray(court.sports) ? court.sports : (court.sport ? [court.sport] : [])).map(s => (
+                          <Tag key={s} color="blue" style={{ marginBottom: '4px' }}>{s}</Tag>
+                        ))}
                         <br />
                         <Text strong>Preço:</Text> R$ {court.price || 0}/hora
                         <br />
@@ -1237,11 +1181,11 @@ const CourtOwnerDashboard = () => {
             </Form.Item>
 
             <Form.Item
-              name="sport"
-              label="Esporte"
-              rules={[{ required: true, message: 'Selecione o esporte!' }]}
+              name="sports"
+              label="Esportes (selecione um ou mais)"
+              rules={[{ required: true, message: 'Selecione pelo menos um esporte!' }]}
             >
-              <Select placeholder="Selecione o esporte">
+              <Select mode="multiple" placeholder="Selecione os esportes">
                 {sports && sports.length > 0 && sports.map(sport => (
                   <Option key={sport.id} value={sport.name}>
                     {sport.icon} {sport.name}

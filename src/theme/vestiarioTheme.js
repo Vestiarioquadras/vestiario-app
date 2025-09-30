@@ -48,26 +48,26 @@ export const responsiveConfig = {
 
 export const vestiarioTheme = {
   token: {
-    // Cores principais baseadas na logo laranja #ff5e0e
-    colorPrimary: '#ff5e0e', // Laranja principal da logo
-    colorSuccess: '#10b981', // Verde para sucesso
-    colorWarning: '#f59e0b', // Amarelo para avisos
-    colorError: '#ef4444', // Vermelho para erros
-    colorInfo: '#3b82f6', // Azul para informações
+    // Cores principais com primária verde #B1EC32 e visual minimalista
+    colorPrimary: '#B1EC32',
+    colorSuccess: '#16a34a',
+    colorWarning: '#f59e0b',
+    colorError: '#ef4444',
+    colorInfo: '#3b82f6',
     
-    // Cores de fundo
+    // Cores de fundo (foco em branco e tons sutis)
     colorBgContainer: '#ffffff',
-    colorBgElevated: '#fafbfc',
-    colorBgLayout: '#f8fafc',
+    colorBgElevated: '#ffffff',
+    colorBgLayout: '#ffffff',
     colorBgMask: 'rgba(0, 0, 0, 0.45)',
     
-    // Cores de texto
-    colorText: '#1f2937',
+    // Cores de texto com alto contraste no branco
+    colorText: '#111827',
     colorTextSecondary: '#6b7280',
     colorTextTertiary: '#9ca3af',
     colorTextQuaternary: '#d1d5db',
     
-    // Bordas
+    // Bordas mais discretas
     colorBorder: '#e5e7eb',
     colorBorderSecondary: '#f3f4f6',
     
@@ -77,11 +77,10 @@ export const vestiarioTheme = {
     borderRadiusSM: 8,
     borderRadiusXS: 6,
     
-    // Sombras melhoradas
-    boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
-    boxShadowSecondary: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    boxShadowTertiary: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-    boxShadowTertiary: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    // Sombras suaves para minimalismo
+    boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+    boxShadowSecondary: '0 2px 6px rgba(0,0,0,0.06)',
+    boxShadowTertiary: '0 8px 16px rgba(0,0,0,0.08)',
     
     // Fontes melhoradas
     fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
@@ -214,16 +213,16 @@ export const vestiarioTheme = {
 // Cores específicas para gradientes e backgrounds
 export const vestiarioColors = {
   primary: {
-    50: '#fff7ed',
-    100: '#ffedd5',
-    200: '#fed7aa',
-    300: '#fdba74',
-    400: '#fb923c',
-    500: '#ff5e0e', // Cor principal da logo
-    600: '#ea580c',
-    700: '#c2410c',
-    800: '#9a3412',
-    900: '#7c2d12',
+    50: '#f6ffda',
+    100: '#e9ffb0',
+    200: '#dcff8a',
+    300: '#cfff63',
+    400: '#c3fa4b',
+    500: '#B1EC32',
+    600: '#98d31a',
+    700: '#7eb512',
+    800: '#5f8e0e',
+    900: '#476b0b',
   },
   success: {
     50: '#ecfdf5',
@@ -265,8 +264,8 @@ export const vestiarioColors = {
 
 // Gradientes personalizados
 export const vestiarioGradients = {
-  primary: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
-  primaryHover: 'linear-gradient(135deg, #ea580c 0%, #ff7c32 100%)',
+  primary: 'linear-gradient(135deg, #B1EC32 0%, #98d31a 100%)',
+  primaryHover: 'linear-gradient(135deg, #98d31a 0%, #7eb512 100%)',
   secondary: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
   success: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
   warning: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',

@@ -596,75 +596,7 @@ const PlayerDashboard = () => {
           maxWidth: '1400px', 
           margin: '0 auto'
         }}>
-          {/* Boas-vindas */}
-          <Card style={{ 
-            marginBottom: isMobile ? '20px' : '32px', 
-            background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
-            border: 'none',
-            color: 'white',
-            borderRadius: '20px',
-            boxShadow: '0 10px 15px -3px rgba(255, 94, 14, 0.3), 0 4px 6px -2px rgba(255, 94, 14, 0.1)',
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            {/* Efeito de fundo decorativo */}
-            <div style={{
-              position: 'absolute',
-              top: '-50%',
-              right: '-20%',
-              width: '200px',
-              height: '200px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            <div style={{
-              position: 'absolute',
-              bottom: '-30%',
-              left: '-10%',
-              width: '150px',
-              height: '150px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            
-            <div style={{ 
-              display: 'flex', 
-              alignItems: isMobile ? 'flex-start' : 'center', 
-              marginBottom: '16px',
-              flexDirection: isMobile ? 'column' : 'row',
-              textAlign: isMobile ? 'center' : 'left',
-              position: 'relative',
-              zIndex: 2
-            }}>
-              {isMobile && (
-                <div style={{ marginBottom: '12px' }}>
-                  <Title level={3} style={{ margin: 0, color: 'white', fontWeight: '600' }}>
-                    Olá, {user?.name || 'Jogador'}! 👋
-                  </Title>
-                </div>
-              )}
-              <Logo size={isMobile ? "medium" : "large"} style={{ 
-                marginRight: isMobile ? '0' : '20px',
-                marginBottom: isMobile ? '12px' : '0',
-                filter: 'brightness(0) invert(1)'
-              }} />
-              <div>
-                <Title level={isMobile ? 3 : 2} style={{ margin: 0, color: 'white', fontWeight: '600' }}>
-                  Encontre seu esporte! 🏆
-                </Title>
-                <Text style={{ 
-                  fontSize: isMobile ? '14px' : '16px',
-                  display: isMobile ? 'block' : 'inline',
-                  color: 'rgba(255, 255, 255, 0.9)',
-                  fontWeight: '400'
-                }}>
-                  Busque estabelecimentos, reserve quadras e conecte-se com outros jogadores.
-                </Text>
-              </div>
-            </div>
-          </Card>
+          {/* seção de boas-vindas removida */}
 
           {/* BARRA DE PESQUISA GRANDE E CLARA */}
           <Card id="search-section" style={{ 
@@ -865,8 +797,8 @@ const PlayerDashboard = () => {
           {selectedFavoriteCourt && (
             <Card style={{ 
               marginBottom: '24px', 
-              background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
-              border: '2px solid #ff5e0e'
+              background: 'linear-gradient(135deg, #B1EC32 0%, #98d31a 100%)',
+              border: '2px solid #B1EC32'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -907,7 +839,7 @@ const PlayerDashboard = () => {
                           Remover
                         </Button>
                       }
-                      style={{ border: '2px solid #ff4d4f' }}
+                      style={{ border: '2px solid #B1EC32' }}
                     >
                       <div>
                         <Text strong>🏢 {favorite.establishmentName}</Text>
