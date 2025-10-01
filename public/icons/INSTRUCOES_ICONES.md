@@ -12,7 +12,7 @@ Criar ícones PWA personalizados usando a logo oficial do Vestiário em todos os
 
 ### **Opção 2: Gerador Online**
 1. **Acesse**: [PWA Builder](https://www.pwabuilder.com/imageGenerator)
-2. **Faça upload** da logo: `public/logo_e_nome_sem_fundo.png`
+2. **Faça upload** da logo: `public/logo_e_nome_sem_fundo1.png`
 3. **Baixe todos os tamanhos** gerados
 4. **Renomeie** para: `icon-{tamanho}x{tamanho}.png`
 
@@ -44,7 +44,7 @@ Criar ícones PWA personalizados usando a logo oficial do Vestiário em todos os
 - **Qualidade**: Alta resolução
 
 ### **Design**
-- **Baseado na logo**: `logo_e_nome_sem_fundo.png`
+- **Baseado na logo**: `logo_e_nome_sem_fundo1.png`
 - **Proporção**: Quadrada (1:1)
 - **Elementos**: Logo completa ou versão simplificada
 - **Legibilidade**: Deve ser reconhecível em tamanhos pequenos

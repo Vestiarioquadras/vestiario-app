@@ -1,0 +1,31 @@
+// 🔒 Regras de Desenvolvimento Firebase Storage - TEMPORÁRIAS
+// Estas regras são mais permissivas para desenvolvimento
+// ⚠️ NÃO USE EM PRODUÇÃO!
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 📸 Permitir upload de imagens para qualquer usuário autenticado
+    match /images/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // 🏟️ Permitir upload de imagens de quadras
+    match /courts/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // 👤 Permitir upload de imagens de perfil
+    match /profiles/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // 🚫 Permitir acesso a todos os outros arquivos
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+
+// ⚠️ ATENÇÃO: Estas regras são apenas para desenvolvimento!
+// Para produção, use regras mais restritivas

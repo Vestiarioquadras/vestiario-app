@@ -53,8 +53,9 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { courtsService, sportsService, bookingsService, statsService, scheduleService } from '../services/firestoreService'
+import { courtsService, sportsService, bookingsService, statsService, scheduleService, notificationsService } from '../services/firestoreService'
 import Logo from '../components/Logo'
+import ImageUploadSimple from '../components/ImageUploadSimple'
 import useResponsive from '../hooks/useResponsive'
 import { vestiarioGradients, vestiarioStyles } from '../theme/vestiarioTheme'
 
@@ -86,6 +87,9 @@ const CourtOwnerDashboard = () => {
   const [editingCourt, setEditingCourt] = useState(null)
   const [userEstablishment, setUserEstablishment] = useState(null)
   const [userEstablishments, setUserEstablishments] = useState([])
+  const [courtImages, setCourtImages] = useState([])
+  const [notifications, setNotifications] = useState([])
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [form] = Form.useForm()
   const [blockForm] = Form.useForm()
   const [settingsForm] = Form.useForm()
@@ -110,12 +114,13 @@ const CourtOwnerDashboard = () => {
     setLoading(true)
     try {
       console.log('🔄 Carregando dados para dono:', user.uid)
-      const [sportsData, bookingsData, scheduleData, statsData, courtsData] = await Promise.all([
+      const [sportsData, bookingsData, scheduleData, statsData, courtsData, notificationsData] = await Promise.all([
         sportsService.getAllSports(),
         bookingsService.getOwnerBookings(user.uid),
         scheduleService.getScheduleData(selectedDate),
         statsService.getOwnerStats(user.uid),
-        courtsService.getCourtsByOwner(user.uid)
+        courtsService.getCourtsByOwner(user.uid),
+        notificationsService.getOwnerNotifications(user.uid)
       ])
       
       console.log('📊 Dados carregados:', {
@@ -130,6 +135,8 @@ const CourtOwnerDashboard = () => {
       setBookings(bookingsData)
       setScheduleData(scheduleData)
       setOwnerStats(statsData)
+      setNotifications(notificationsData)
+      setUnreadNotifications(notificationsData.filter(n => !n.isRead).length)
       
       // Carrega o estabelecimento do usuário com todas as quadras
       if (courtsData.length > 0) {
@@ -217,25 +224,37 @@ const CourtOwnerDashboard = () => {
     try {
       const newCourt = {
         name: values.name,
-        sport: values.sport,
+        sports: values.sports || [values.sport], // Suporte para múltiplos esportes
+        sport: values.sports?.[0] || values.sport, // Manter compatibilidade
         location: userEstablishment?.location || 'Local não informado',
         address: userEstablishment?.address || 'Endereço não informado',
         price: values.hourlyRate || 80.00,
         description: values.description || 'Quadra de esporte',
-        amenities: values.amenities || ['Vestiário', 'Estacionamento'],
+        capacity: values.capacity || 10,
+        rules: values.rules || '',
+        amenities: values.amenities || [],
+        isIndoor: values.isIndoor,
         ownerId: user?.uid,
         ownerName: user?.displayName || 'Proprietário',
         phone: userEstablishment?.phone || '(11) 99999-9999',
         email: user?.email,
-        images: ['https://via.placeholder.com/400x300?text=' + encodeURIComponent(values.name)],
+        images: courtImages || [],
         rating: 0,
         totalReviews: 0,
-        isAvailable: true
+        isAvailable: true,
+        establishmentName: userEstablishment?.name || 'Meu Estabelecimento'
       }
+
+      // Remover campos undefined
+      Object.keys(newCourt).forEach(key => {
+        if (newCourt[key] === undefined) {
+          delete newCourt[key]
+        }
+      })
 
       await courtsService.createCourt(newCourt)
       
-      message.success('Quadra adicionada com sucesso!')
+      message.success('✅ Quadra adicionada com sucesso!')
       setCourtModalOpen(false)
       courtForm.resetFields()
       setEditingCourt(null)
@@ -244,7 +263,7 @@ const CourtOwnerDashboard = () => {
       loadInitialData()
     } catch (error) {
       console.error('Erro ao adicionar quadra:', error)
-      message.error('Erro ao adicionar quadra')
+      message.error('❌ Erro ao adicionar quadra')
     }
   }
 
@@ -253,31 +272,62 @@ const CourtOwnerDashboard = () => {
    */
   const handleEditCourt = async (values) => {
     try {
+      console.log('🔧 Iniciando edição da quadra:', editingCourt?.id)
+      console.log('📋 Valores do formulário:', values)
+      console.log('🖼️ Imagens atuais:', courtImages)
+      
       if (!editingCourt) {
-        message.error('Quadra não encontrada')
+        console.error('❌ Quadra não encontrada para edição')
+        message.error('❌ Quadra não encontrada')
         return
       }
 
+      // Filtrar valores undefined para evitar erro no Firestore
       const updatedCourtData = {
         name: values.name,
-        sport: values.sport,
-        price: values.hourlyRate || editingCourt.price,
-        description: values.description || editingCourt.description,
-        amenities: values.amenities || editingCourt.amenities
+        sports: values.sports && values.sports.length > 0 ? values.sports : editingCourt.sports || [editingCourt.sport], // Suporte para múltiplos esportes
+        sport: values.sports && values.sports.length > 0 ? values.sports[0] : editingCourt.sport, // Manter compatibilidade
+        price: values.hourlyRate !== undefined ? values.hourlyRate : editingCourt.price,
+        description: values.description || editingCourt.description || '',
+        capacity: values.capacity !== undefined ? values.capacity : editingCourt.capacity,
+        rules: values.rules || editingCourt.rules || '',
+        amenities: values.amenities || editingCourt.amenities || [],
+        isIndoor: values.isIndoor !== undefined ? values.isIndoor : editingCourt.isIndoor,
+        images: courtImages || []
       }
+
+      // Remover campos undefined
+      Object.keys(updatedCourtData).forEach(key => {
+        if (updatedCourtData[key] === undefined) {
+          delete updatedCourtData[key]
+        }
+      })
+
+      console.log('📝 Dados preparados para atualização:', updatedCourtData)
+      console.log('🆔 ID da quadra:', editingCourt.id)
 
       await courtsService.updateCourt(editingCourt.id, updatedCourtData)
       
-      message.success('Quadra editada com sucesso!')
+      console.log('✅ Quadra editada com sucesso!')
+      message.success('✅ Quadra editada com sucesso!')
       setCourtModalOpen(false)
       courtForm.resetFields()
       setEditingCourt(null)
+      setCourtImages([])
       
       // Recarregar dados
+      console.log('🔄 Recarregando dados...')
       loadInitialData()
     } catch (error) {
-      console.error('Erro ao editar quadra:', error)
-      message.error('Erro ao editar quadra')
+      console.error('❌ Erro ao editar quadra:', error)
+      console.error('🔍 Detalhes do erro:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        editingCourt: editingCourt,
+        values: values
+      })
+      message.error('❌ Erro ao editar quadra')
     }
   }
 
@@ -302,12 +352,19 @@ const CourtOwnerDashboard = () => {
    * Abre modal para editar quadra
    */
   const openEditCourtModal = (court) => {
+    console.log('🔧 Abrindo modal para editar quadra:', court)
     setEditingCourt(court)
-    courtForm.setFieldsValue({
-      name: court.name,
-      sport: court.sport,
+    setCourtImages(court.images || [])
+      courtForm.setFieldsValue({
+        name: court.name,
+        sports: court.sports || [court.sport], // Carregar múltiplos esportes
+        sport: court.sport, // Manter compatibilidade
       hourlyRate: court.price,
-      isIndoor: court.isIndoor
+      isIndoor: court.isIndoor,
+      description: court.description || '',
+      amenities: court.amenities || [],
+      capacity: court.capacity || 10,
+      rules: court.rules || ''
     })
     setCourtModalOpen(true)
   }
@@ -317,6 +374,7 @@ const CourtOwnerDashboard = () => {
    */
   const openAddCourtModal = () => {
     setEditingCourt(null)
+    setCourtImages([])
     courtForm.resetFields()
     setCourtModalOpen(true)
   }
@@ -595,7 +653,7 @@ const CourtOwnerDashboard = () => {
       dataIndex: 'status',
       key: 'status',
       render: (status) => (
-        <Tag color={status === 'confirmed' ? 'green' : status === 'pending' ? 'orange' : 'red'}>
+        <Tag color={status === 'confirmed' ? 'green' : status === 'pending' ? 'green' : 'red'}>
           {status === 'confirmed' ? 'Confirmada' : status === 'pending' ? 'Pendente' : 'Cancelada'}
         </Tag>
       )
@@ -706,74 +764,115 @@ const CourtOwnerDashboard = () => {
           maxWidth: '1400px', 
           margin: '0 auto'
         }}>
-          {/* Boas-vindas */}
-          <Card style={{ 
-            marginBottom: isMobile ? '20px' : '32px', 
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            border: 'none',
-            color: 'white',
-            borderRadius: '20px',
-            boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.3), 0 4px 6px -2px rgba(16, 185, 129, 0.1)',
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            {/* Efeito de fundo decorativo */}
-            <div style={{
-              position: 'absolute',
-              top: '-50%',
-              right: '-20%',
-              width: '200px',
-              height: '200px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            <div style={{
-              position: 'absolute',
-              bottom: '-30%',
-              left: '-10%',
-              width: '150px',
-              height: '150px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            
-            <div style={{ 
-              display: 'flex', 
-              alignItems: isMobile ? 'flex-start' : 'center', 
-              marginBottom: '16px',
-              flexDirection: isMobile ? 'column' : 'row',
-              textAlign: isMobile ? 'center' : 'left',
-              position: 'relative',
-              zIndex: 2
-            }}>
-              <Logo size={isMobile ? "medium" : "large"} style={{ 
-                marginRight: isMobile ? '0' : '20px',
-                marginBottom: isMobile ? '12px' : '0',
-                filter: 'brightness(0) invert(1)'
-              }} />
-              <div>
-                <Title level={isMobile ? 3 : 2} style={{ 
-                  margin: 0, 
-                  color: 'white', 
-                  fontWeight: '600' 
-                }}>
-                  Gerencie suas Quadras! 🏟️
-                </Title>
-                <Text style={{ 
-                  fontSize: isMobile ? '14px' : '16px',
-                  color: 'rgba(255, 255, 255, 0.9)',
-                  fontWeight: '400'
-                }}>
-                  Controle suas reservas, gerencie suas quadras e acompanhe sua receita.
-                </Text>
-              </div>
-            </div>
-          </Card>
+          {/* Ações Rápidas */}
+          <Row gutter={[16, 16]} style={{ marginBottom: isMobile ? '20px' : '32px' }}>
+            <Col xs={24} sm={12} md={8}>
+              <Card 
+                hoverable
+                style={{ 
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, #B1EC32 0%, #8BC34A 100%)',
+                  border: 'none',
+                  color: 'white',
+                  textAlign: 'center',
+                  height: '120px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={() => {
+                  setCourtModalOpen(true)
+                  message.success('📝 Abrindo formulário para adicionar quadra...')
+                }}
+              >
+                <div>
+                  <PlusOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                  <div style={{ fontWeight: '600', fontSize: '16px' }}>
+                    Adicionar Quadra
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Card 
+                hoverable
+                style={{ 
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, #1890ff 0%, #096dd9 100%)',
+                  border: 'none',
+                  color: 'white',
+                  textAlign: 'center',
+                  height: '120px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={() => {
+                  // Navegar para seção de agenda
+                  const agendaSection = document.getElementById('agenda-section')
+                  if (agendaSection) {
+                    agendaSection.scrollIntoView({ behavior: 'smooth' })
+                    message.success('📅 Navegando para agenda...')
+                  } else {
+                    // Se não encontrar, abrir modal
+                    setScheduleModalOpen(true)
+                    message.success('📅 Abrindo agenda...')
+                  }
+                }}
+              >
+                <div>
+                  <CalendarOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                  <div style={{ fontWeight: '600', fontSize: '16px' }}>
+                    Ver Agenda
+                  </div>
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Card 
+                hoverable
+                style={{ 
+                  borderRadius: '16px',
+                  background: 'linear-gradient(135deg, #52c41a 0%, #389e0d 100%)',
+                  border: 'none',
+                  color: 'white',
+                  textAlign: 'center',
+                  height: '120px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={() => {
+                  // Scroll para seção de estatísticas ou abrir modal
+                  const statsSection = document.getElementById('stats-section')
+                  if (statsSection) {
+                    statsSection.scrollIntoView({ behavior: 'smooth' })
+                    message.success('📊 Navegando para estatísticas...')
+                  } else {
+                    // Se não encontrar, recarregar dados
+                    loadInitialData()
+                    message.success('📊 Atualizando estatísticas...')
+                  }
+                }}
+              >
+                <div>
+                  <BarChartOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                  <div style={{ fontWeight: '600', fontSize: '16px' }}>
+                    Ver Estatísticas
+                  </div>
+                </div>
+              </Card>
+            </Col>
+          </Row>
 
           {/* Estatísticas Principais */}
-          <Row gutter={[16, 16]} style={{ marginBottom: isMobile ? '20px' : '32px' }}>
+          <Row gutter={[16, 16]} style={{ marginBottom: isMobile ? '20px' : '32px' }} id="stats-section">
             <Col xs={24} sm={12} md={6}>
               <Card style={{
                 borderRadius: '16px',
@@ -873,7 +972,12 @@ const CourtOwnerDashboard = () => {
           </Row>
 
           {/* FILTRO GRANDE E CLARO */}
-          <Card style={{ marginBottom: '24px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+          <Card style={{ 
+            marginBottom: '24px', 
+            background: 'linear-gradient(135deg, #B1EC32 0%, #8BC34A 100%)',
+            borderRadius: '16px',
+            boxShadow: '0 8px 25px -5px rgba(177, 236, 50, 0.3), 0 4px 6px -2px rgba(177, 236, 50, 0.1)'
+          }}>
             <Row gutter={[16, 16]} align="middle">
               <Col xs={24} sm={8}>
                 <div style={{ textAlign: 'center' }}>
@@ -889,7 +993,10 @@ const CourtOwnerDashboard = () => {
                       width: '100%', 
                       height: '48px', 
                       fontSize: '16px',
-                      borderRadius: '8px'
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      background: 'rgba(255,255,255,0.9)',
+                      color: '#333'
                     }}
                   />
                 </div>
@@ -904,7 +1011,8 @@ const CourtOwnerDashboard = () => {
                     placeholder="Todas as quadras"
                     style={{ 
                       width: '100%', 
-                      height: '48px'
+                      height: '48px',
+                      borderRadius: '12px'
                     }}
                     size="large"
                     onChange={(value) => setSelectedCourt(value)}
@@ -935,9 +1043,21 @@ const CourtOwnerDashboard = () => {
                       fontSize: '16px',
                       fontWeight: 'bold',
                       background: 'rgba(255,255,255,0.2)',
-                      border: '1px solid rgba(255,255,255,0.3)'
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      color: 'white',
+                      borderRadius: '12px',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.3)'
+                      e.target.style.transform = 'translateY(-2px)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.2)'
+                      e.target.style.transform = 'translateY(0)'
                     }}
                     onClick={loadScheduleData}
+                    title="Dono precisa de controle ativo - atualizar reservas e agenda em tempo real"
                   >
                     Atualizar Agenda
                   </Button>
@@ -947,7 +1067,7 @@ const CourtOwnerDashboard = () => {
           </Card>
 
           {/* AGENDA POR QUADRA */}
-          <Card title="📅 Agenda do Dia" style={{ marginBottom: '24px' }}>
+          <Card title="📅 Agenda do Dia" style={{ marginBottom: '24px' }} id="agenda-section">
             <Row gutter={[16, 16]}>
               {scheduleData && scheduleData.length > 0 ? scheduleData
                 .filter(court => !selectedCourt || court.courtId === selectedCourt)
@@ -1086,7 +1206,14 @@ const CourtOwnerDashboard = () => {
                   <Col xs={24} sm={12} md={8} key={court.id}>
                     <Card 
                       size="small"
-                      title={court.name}
+                      title={
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span>{court.name}</span>
+                          <Tag color={court.isIndoor ? 'blue' : 'green'}>
+                            {court.isIndoor ? '🏠 Coberta' : '☀️ Descoberta'}
+                          </Tag>
+                        </div>
+                      }
                       extra={
                         <Space>
                           <Button 
@@ -1113,26 +1240,127 @@ const CourtOwnerDashboard = () => {
                           />
                         </Space>
                       }
+                      style={{ 
+                        border: `2px solid ${court.isIndoor ? '#1890ff' : '#52c41a'}`,
+                        borderRadius: '12px'
+                      }}
                     >
                       <div>
-                        <Text strong>Esporte:</Text> <Tag color="blue">{court.sport}</Tag>
-                        <br />
-                        <Text strong>Preço:</Text> R$ {court.price || 0}/hora
-                        <br />
-                        <Text strong>Tipo:</Text> {court.isIndoor ? 'Coberta' : 'Descoberta'}
-                        <br />
-                        <Text strong>Endereço:</Text> {court.address || 'Não informado'}
-                        <br />
-                        <Text strong>Telefone:</Text> {court.phone || 'Não informado'}
-                        <br />
-                        <Text strong>Rating:</Text> ⭐ {court.rating || 0}/5.0
-                        <br />
-                        <Text strong>Status:</Text> 
-                        <Badge 
-                          status={court.isAvailable ? 'success' : 'error'} 
-                          text={court.isAvailable ? 'Disponível' : 'Ocupada'}
-                          style={{ marginLeft: '8px' }}
-                        />
+                        <Row gutter={[8, 8]}>
+                          <Col span={12}>
+                            <Text strong>⚽ Esportes:</Text> 
+                            <div style={{ marginTop: '4px' }}>
+                              {(court.sports || [court.sport]).map((sport, index) => (
+                                <Tag key={index} color="blue" style={{ margin: '2px' }}>
+                                  {sport}
+                                </Tag>
+                              ))}
+                            </div>
+                          </Col>
+                          <Col span={12}>
+                            <Text strong>💰 Preço:</Text> R$ {court.price || 0}/hora
+                          </Col>
+                          <Col span={12}>
+                            <Text strong>👥 Capacidade:</Text> {court.capacity || 'N/A'} pessoas
+                          </Col>
+                          <Col span={12}>
+                            <Text strong>⭐ Rating:</Text> {court.rating || 0}/5.0
+                          </Col>
+                        </Row>
+                        
+                        {court.description && (
+                          <div style={{ marginTop: '8px' }}>
+                            <Text strong>📝 Descrição:</Text>
+                            <br />
+                            <Text type="secondary" style={{ fontSize: '12px' }}>
+                              {court.description}
+                            </Text>
+                          </div>
+                        )}
+
+                        {court.amenities && court.amenities.length > 0 && (
+                          <div style={{ marginTop: '8px' }}>
+                            <Text strong>🏢 Comodidades:</Text>
+                            <br />
+                            <div style={{ marginTop: '4px' }}>
+                              {court.amenities.slice(0, 3).map(amenity => (
+                                <Tag key={amenity} size="small" style={{ margin: '2px' }}>
+                                  {amenity}
+                                </Tag>
+                              ))}
+                              {court.amenities.length > 3 && (
+                                <Tag size="small" style={{ margin: '2px' }}>
+                                  +{court.amenities.length - 3} mais
+                                </Tag>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {court.images && court.images.length > 0 && (
+                          <div style={{ marginTop: '8px' }}>
+                            <Text strong>📸 Fotos:</Text>
+                            <br />
+                            <div style={{ 
+                              display: 'flex', 
+                              gap: '4px', 
+                              marginTop: '4px',
+                              overflowX: 'auto'
+                            }}>
+                              {court.images.slice(0, 3).map((image, index) => (
+                                <div
+                                  key={index}
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: '4px',
+                                    overflow: 'hidden',
+                                    border: '1px solid #d9d9d9',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  <img
+                                    src={image.url}
+                                    alt={`Foto ${index + 1}`}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover'
+                                    }}
+                                  />
+                                </div>
+                              ))}
+                              {court.images.length > 3 && (
+                                <div
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #d9d9d9',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: '#f5f5f5',
+                                    fontSize: '10px',
+                                    color: '#666'
+                                  }}
+                                >
+                                  +{court.images.length - 3}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Badge 
+                            status={court.isAvailable ? 'success' : 'error'} 
+                            text={court.isAvailable ? '✅ Disponível' : '❌ Ocupada'}
+                          />
+                          <Text type="secondary" style={{ fontSize: '11px' }}>
+                            📍 {court.address || 'Endereço não informado'}
+                          </Text>
+                        </div>
                       </div>
                     </Card>
                   </Col>
@@ -1165,7 +1393,7 @@ const CourtOwnerDashboard = () => {
                       <div><strong>⏰</strong> {booking.time}</div>
                       <div><strong>💰</strong> R$ {booking.totalPrice?.toFixed(2)}</div>
                       <div style={{ marginTop: '8px' }}>
-                        <Tag color={booking.status === 'confirmed' ? 'green' : booking.status === 'pending' ? 'orange' : 'red'}>
+                        <Tag color={booking.status === 'confirmed' ? 'green' : booking.status === 'pending' ? 'green' : 'red'}>
                           {booking.status === 'confirmed' ? 'Confirmada' : booking.status === 'pending' ? 'Pendente' : 'Cancelada'}
                         </Tag>
                       </div>
@@ -1213,82 +1441,177 @@ const CourtOwnerDashboard = () => {
 
         {/* Modal para Adicionar/Editar Quadra */}
         <Modal
-          title={editingCourt ? "Editar Quadra" : "Adicionar Nova Quadra"}
+          title={editingCourt ? "✏️ Editar Quadra" : "➕ Adicionar Nova Quadra"}
           open={courtModalOpen}
           onCancel={() => {
             setCourtModalOpen(false)
             setEditingCourt(null)
+            setCourtImages([])
             courtForm.resetFields()
           }}
           footer={null}
-          width={600}
+          width={800}
         >
           <Form
             form={courtForm}
             layout="vertical"
             onFinish={editingCourt ? handleEditCourt : handleAddCourt}
           >
-            <Form.Item
-              name="name"
-              label="Nome da Quadra"
-              rules={[{ required: true, message: 'Digite o nome da quadra!' }]}
-            >
-              <Input placeholder="Ex: Quadra 1 - Futebol" />
-            </Form.Item>
-
-            <Form.Item
-              name="sport"
-              label="Esporte"
-              rules={[{ required: true, message: 'Selecione o esporte!' }]}
-            >
-              <Select placeholder="Selecione o esporte">
-                {sports && sports.length > 0 && sports.map(sport => (
-                  <Option key={sport.id} value={sport.name}>
-                    {sport.icon} {sport.name}
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-
             <Row gutter={16}>
               <Col span={12}>
                 <Form.Item
+                  name="name"
+                  label="🏟️ Nome da Quadra"
+                  rules={[{ required: true, message: 'Digite o nome da quadra!' }]}
+                >
+                  <Input placeholder="Ex: Quadra 1 - Futebol" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="sports"
+                  label="⚽ Esportes"
+                  rules={editingCourt ? [] : [{ required: true, message: 'Selecione pelo menos um esporte!' }]}
+                  help={editingCourt ? "Deixe em branco para manter os esportes atuais" : "Selecione todos os esportes que podem ser praticados nesta quadra"}
+                >
+                  <Select 
+                    mode="multiple"
+                    placeholder="Selecione os esportes"
+                    style={{ width: '100%' }}
+                    showSearch
+                    filterOption={(input, option) =>
+                      (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    {sports && sports.length > 0 && sports.map(sport => (
+                      <Option key={sport.id} value={sport.name}>
+                        {sport.icon} {sport.name}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
                   name="hourlyRate"
-                  label="Preço por Hora (R$)"
-                  rules={[{ required: true, message: 'Digite o preço!' }]}
+                  label="💰 Preço por Hora (R$)"
+                  rules={editingCourt ? [] : [{ required: true, message: 'Digite o preço!' }]}
+                  help={editingCourt ? "Deixe em branco para manter o preço atual" : "Digite o preço por hora"}
                 >
                   <Input 
                     type="number"
                     placeholder="0.00"
                     step="0.01"
+                    prefix="R$"
                   />
                 </Form.Item>
               </Col>
-              <Col span={12}>
+              <Col span={8}>
                 <Form.Item
                   name="isIndoor"
-                  label="Tipo"
-                  rules={[{ required: true, message: 'Selecione o tipo!' }]}
+                  label="🏠 Tipo"
+                  rules={editingCourt ? [] : [{ required: true, message: 'Selecione o tipo!' }]}
+                  help={editingCourt ? "Deixe em branco para manter o tipo atual" : "Selecione se a quadra é coberta ou descoberta"}
                 >
-                  <Select placeholder="Selecione o tipo">
-                    <Option value={true}>Coberta</Option>
-                    <Option value={false}>Descoberta</Option>
+                  <Select placeholder={editingCourt ? "Manter tipo atual" : "Selecione o tipo"}>
+                    <Option value={true}>🏠 Coberta</Option>
+                    <Option value={false}>☀️ Descoberta</Option>
                   </Select>
                 </Form.Item>
               </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="capacity"
+                  label="👥 Capacidade"
+                  rules={editingCourt ? [] : [{ required: true, message: 'Digite a capacidade!' }]}
+                  help={editingCourt ? "Deixe em branco para manter a capacidade atual" : "Digite a capacidade máxima"}
+                >
+                  <Input 
+                    type="number"
+                    placeholder="Ex: 10"
+                    suffix="pessoas"
+                  />
+                </Form.Item>
+              </Col>
             </Row>
+
+            <Form.Item
+              name="description"
+              label="📝 Descrição da Quadra"
+            >
+              <Input.TextArea 
+                placeholder="Descreva as características da quadra, dimensões, piso, etc..."
+                rows={3}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="amenities"
+              label="🏢 Comodidades do Estabelecimento"
+              help="Selecione as comodidades disponíveis no seu estabelecimento"
+            >
+              <Select
+                mode="multiple"
+                placeholder="Selecione as comodidades disponíveis"
+                style={{ width: '100%' }}
+                options={[
+                  { label: '🚿 Vestiário', value: 'vestiario' },
+                  { label: '🚰 Bebedouro', value: 'bebedouro' },
+                  { label: '🅿️ Estacionamento', value: 'estacionamento' },
+                  { label: '👕 Colete', value: 'colete' },
+                  { label: '⚽ Bola', value: 'bola' },
+                  { label: '🏓 Raquete', value: 'raquete' },
+                  { label: '🌡️ Ar Condicionado', value: 'ar_condicionado' },
+                  { label: '🔊 Som', value: 'som' },
+                  { label: '💡 Iluminação', value: 'iluminacao' },
+                  { label: '🏥 Primeiros Socorros', value: 'primeiros_socorros' },
+                  { label: '🍽️ Lanchonete', value: 'lanchonete' },
+                  { label: '🚻 Banheiro', value: 'banheiro' },
+                  { label: '🔌 Wi-Fi', value: 'wifi' },
+                  { label: '📺 TV', value: 'tv' },
+                  { label: '🪑 Cadeiras', value: 'cadeiras' }
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="rules"
+              label="📋 Regras da Quadra"
+            >
+              <Input.TextArea 
+                placeholder="Ex: Proibido fumar, uso obrigatório de tênis, etc..."
+                rows={2}
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="📸 Fotos da Quadra"
+              help="Adicione fotos para mostrar sua quadra aos clientes"
+            >
+          <ImageUploadSimple
+            images={courtImages}
+            onImagesChange={setCourtImages}
+            maxImages={5}
+            maxSize={5}
+            disabled={false}
+          />
+            </Form.Item>
 
             <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
               <Space>
                 <Button onClick={() => {
                   setCourtModalOpen(false)
                   setEditingCourt(null)
+                  setCourtImages([])
                   courtForm.resetFields()
                 }}>
                   Cancelar
                 </Button>
-                <Button type="primary" htmlType="submit">
-                  {editingCourt ? 'Salvar Alterações' : 'Adicionar Quadra'}
+                <Button type="primary" htmlType="submit" size="large">
+                  {editingCourt ? '💾 Salvar Alterações' : '➕ Adicionar Quadra'}
                 </Button>
               </Space>
             </Form.Item>

@@ -178,7 +178,7 @@ const LoginPage = () => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    background: '#FEFFED',
     padding: isMobile ? '16px' : isTablet ? '20px' : '24px',
     position: 'relative',
     overflow: 'hidden'
@@ -192,9 +192,9 @@ const LoginPage = () => {
     right: 0,
     bottom: 0,
     background: `
-      radial-gradient(circle at 20% 80%, rgba(255, 94, 14, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba(255, 94, 14, 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 40% 40%, rgba(255, 94, 14, 0.05) 0%, transparent 50%)
+      radial-gradient(circle at 20% 80%, rgba(0, 150, 0, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(0, 150, 0, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 40% 40%, rgba(0, 150, 0, 0.03) 0%, transparent 50%)
     `,
     zIndex: 1
   }
@@ -237,7 +237,7 @@ const LoginPage = () => {
             level={isMobile ? 3 : 2} 
             style={{ 
               margin: 0, 
-              color: '#ff5e0e',
+              color: '#B1EC32',
               fontWeight: 'bold',
               fontSize: isMobile ? '20px' : isTablet ? '24px' : '28px'
             }}
@@ -322,7 +322,7 @@ const LoginPage = () => {
               Eu concordo com a{' '}
               <Link 
                 onClick={() => setPrivacyModalOpen(true)}
-                style={{ color: '#ff5e0e' }}
+                style={{ color: '#B1EC32' }}
               >
                 Política de Privacidade
               </Link>
@@ -341,7 +341,7 @@ const LoginPage = () => {
                 height: '52px',
                 fontSize: '16px',
                 fontWeight: '600',
-                background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+                background: '#B1EC32',
                 border: 'none',
                 borderRadius: '12px',
                 boxShadow: '0 4px 12px rgba(255, 94, 14, 0.3)',
@@ -388,8 +388,8 @@ const LoginPage = () => {
           boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-            <InfoCircleOutlined style={{ color: '#ff5e0e', marginRight: '8px', fontSize: '16px' }} />
-            <Text strong style={{ color: '#ff5e0e', fontSize: '14px' }}>Credenciais de Teste</Text>
+            <InfoCircleOutlined style={{ color: '#B1EC32', marginRight: '8px', fontSize: '16px' }} />
+            <Text strong style={{ color: '#B1EC32', fontSize: '14px' }}>Credenciais de Teste</Text>
           </div>
           
           <Space direction="vertical" size="small" style={{ width: '100%' }}>
@@ -403,7 +403,7 @@ const LoginPage = () => {
                   size="small" 
                   type="link"
                   style={{
-                    color: '#ff5e0e',
+                    color: '#B1EC32',
                     fontWeight: '500',
                     padding: '4px 8px',
                     borderRadius: '6px',
@@ -431,7 +431,7 @@ const LoginPage = () => {
                   size="small" 
                   type="link"
                   style={{
-                    color: '#ff5e0e',
+                    color: '#B1EC32',
                     fontWeight: '500',
                     padding: '4px 8px',
                     borderRadius: '6px',

@@ -73,7 +73,7 @@ const ForgotPasswordPage = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#FEFFED',
         padding: '20px'
       }}>
         <Card
@@ -128,7 +128,7 @@ const ForgotPasswordPage = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: '#FEFFED',
       padding: '20px'
     }}>
       <Card
@@ -150,7 +150,7 @@ const ForgotPasswordPage = () => {
               marginBottom: '16px'
             }}
           />
-          <Title level={2} style={{ margin: 0, color: '#ff5e0e' }}>
+          <Title level={2} style={{ margin: 0, color: '#B1EC32' }}>
             Recuperar Senha
           </Title>
           <Text type="secondary">

@@ -54,7 +54,7 @@ const Logo = ({
 
   return (
     <Image
-      src="/logo_e_nome_sem_fundo.png"
+      src="/logo_e_nome_sem_fundo1.png"
       alt="Vestiário - Plataforma Multi-Esportes"
       style={logoStyle}
       className={className}
@@ -65,7 +65,7 @@ const Logo = ({
         <div 
           style={{
             ...logoStyle,
-            background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+            background: 'linear-gradient(135deg, #B1EC32 0%, #B1EC32 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

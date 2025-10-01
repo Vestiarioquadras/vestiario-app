@@ -1,6 +1,6 @@
 /**
  * Tema personalizado do Vestiário App
- * Baseado na identidade visual da marca com cor laranja #ff5e0e
+ * Baseado na identidade visual da marca com cor laranja #B1EC32
  */
 
 // Breakpoints responsivos
@@ -48,8 +48,8 @@ export const responsiveConfig = {
 
 export const vestiarioTheme = {
   token: {
-    // Cores principais baseadas na logo laranja #ff5e0e
-    colorPrimary: '#ff5e0e', // Laranja principal da logo
+    // Cores principais baseadas na logo laranja #B1EC32
+    colorPrimary: '#B1EC32', // Laranja principal da logo
     colorSuccess: '#10b981', // Verde para sucesso
     colorWarning: '#f59e0b', // Amarelo para avisos
     colorError: '#ef4444', // Vermelho para erros
@@ -219,7 +219,7 @@ export const vestiarioColors = {
     200: '#fed7aa',
     300: '#fdba74',
     400: '#fb923c',
-    500: '#ff5e0e', // Cor principal da logo
+    500: '#B1EC32', // Cor principal da logo
     600: '#ea580c',
     700: '#c2410c',
     800: '#9a3412',
@@ -265,7 +265,7 @@ export const vestiarioColors = {
 
 // Gradientes personalizados
 export const vestiarioGradients = {
-  primary: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+  primary: 'linear-gradient(135deg, #B1EC32 0%, #B1EC32 100%)',
   primaryHover: 'linear-gradient(135deg, #ea580c 0%, #ff7c32 100%)',
   secondary: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
   success: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',

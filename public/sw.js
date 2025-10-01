@@ -200,7 +200,7 @@ async function staleWhileRevalidate(request) {
   const cachedResponse = await cache.match(request)
   
   const fetchPromise = fetch(request).then((networkResponse) => {
-    if (networkResponse.ok) {
+    if (networkResponse.ok && request.method === 'GET') {
       cache.put(request, networkResponse.clone())
     }
     return networkResponse

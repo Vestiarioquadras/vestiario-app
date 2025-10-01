@@ -1,9 +1,57 @@
+// 🔒 Regras de Desenvolvimento Firestore - TEMPORÁRIAS
+// Estas regras são mais permissivas para desenvolvimento
+// ⚠️ NÃO USE EM PRODUÇÃO!
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Regras de desenvolvimento - mais permissivas
+    
+    // 🏆 Regras para coleção 'sports' - PÚBLICA
+    match /sports/{sportId} {
+      allow read, write: if true;
+    }
+    
+    // 🏟️ Regras para coleção 'courts' - PÚBLICA
+    match /courts/{courtId} {
+      allow read, write: if true;
+    }
+    
+    // 📅 Regras para coleção 'bookings' - PÚBLICA
+    match /bookings/{bookingId} {
+      allow read, write: if true;
+    }
+    
+    // ❤️ Regras para coleção 'favorites' - PÚBLICA
+    match /favorites/{favoriteId} {
+      allow read, write: if true;
+    }
+    
+    // 🏆 Regras para coleção 'matches' - PÚBLICA
+    match /matches/{matchId} {
+      allow read, write: if true;
+    }
+    
+    // 📅 Regras para coleção 'blockedSlots' - PÚBLICA
+    match /blockedSlots/{slotId} {
+      allow read, write: if true;
+    }
+    
+    // 👥 Regras para coleção 'users' - PÚBLICA
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    
+    // 🏢 Regras para coleção 'establishments' - PÚBLICA
+    match /establishments/{establishmentId} {
+      allow read, write: if true;
+    }
+    
+    // 🚫 Permitir acesso a todas as outras coleções
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
   }
 }
+
+// ⚠️ ATENÇÃO: Estas regras são apenas para desenvolvimento!
+// Para produção, use as regras em firestore.rules

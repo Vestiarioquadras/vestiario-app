@@ -111,15 +111,33 @@ export const courtsService = {
   // Atualizar quadra
   async updateCourt(courtId, updateData) {
     try {
+      console.log('🔄 Iniciando atualização da quadra:', courtId);
+      console.log('📋 Dados para atualização:', updateData);
+      
       const courtRef = doc(db, 'courts', courtId);
-      await updateDoc(courtRef, {
+      
+      const finalUpdateData = {
         ...updateData,
         updatedAt: serverTimestamp()
-      });
+      };
+      
+      console.log('📝 Dados finais para salvar:', finalUpdateData);
+      
+      await updateDoc(courtRef, finalUpdateData);
+      
       console.log('✅ Quadra atualizada com sucesso:', courtId);
+      console.log('📊 Dados salvos:', finalUpdateData);
+      
       return { id: courtId, ...updateData };
     } catch (error) {
       console.error('❌ Erro ao atualizar quadra:', error);
+      console.error('🔍 Detalhes do erro:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        courtId: courtId,
+        updateData: updateData
+      });
       throw error;
     }
   },
@@ -162,7 +180,12 @@ export const sportsService = {
         { id: 'basquete', name: 'Basquete', icon: '🏀' },
         { id: 'tenis', name: 'Tênis', icon: '🎾' },
         { id: 'padel', name: 'Padel', icon: '🏓' },
-        { id: 'volei', name: 'Vôlei', icon: '🏐' }
+        { id: 'volei', name: 'Vôlei', icon: '🏐' },
+        { id: 'futsal', name: 'Futsal', icon: '⚽' },
+        { id: 'beach-tennis', name: 'Beach Tennis', icon: '🏖️' },
+        { id: 'futvolei', name: 'Futvôlei', icon: '⚽🏐' },
+        { id: 'volei-areia', name: 'Vôlei de Areia', icon: '🏖️🏐' },
+        { id: 'poliesportiva', name: 'Quadra Poliesportiva', icon: '🏟️' }
       ];
     }
   }
@@ -271,15 +294,64 @@ export const bookingsService = {
       
       const docRef = await addDoc(collection(db, 'bookings'), {
         ...bookingData,
-        status: 'pending',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
       console.log('✅ Reserva criada com sucesso:', docRef.id);
+      
+      // Se a reserva foi auto-confirmada, notificar o dono
+      if (bookingData.status === 'confirmed') {
+        await this.notifyOwnerAboutNewBooking({ id: docRef.id, ...bookingData });
+      }
+      
       return { id: docRef.id, ...bookingData };
     } catch (error) {
       console.error('❌ Erro ao criar reserva:', error);
       throw error;
+    }
+  },
+
+  // Notificar dono sobre nova reserva confirmada
+  async notifyOwnerAboutNewBooking(bookingData) {
+    try {
+      console.log('📧 Notificando dono sobre nova reserva:', bookingData);
+      
+      // Buscar dados do dono da quadra
+      const courtDoc = await getDoc(doc(db, 'courts', bookingData.courtId));
+      if (!courtDoc.exists()) {
+        console.warn('⚠️ Quadra não encontrada para notificação');
+        return;
+      }
+      
+      const courtData = courtDoc.data();
+      const ownerId = courtData.ownerId;
+      
+      if (!ownerId) {
+        console.warn('⚠️ Dono da quadra não encontrado');
+        return;
+      }
+      
+      // Criar notificação para o dono
+      await addDoc(collection(db, 'notifications'), {
+        ownerId: ownerId,
+        type: 'new_booking',
+        title: 'Nova Reserva Confirmada! 🎉',
+        message: `${bookingData.playerName} reservou ${bookingData.courtName} para ${bookingData.date} às ${bookingData.time}`,
+        bookingId: bookingData.id,
+        courtId: bookingData.courtId,
+        playerName: bookingData.playerName,
+        date: bookingData.date,
+        time: bookingData.time,
+        totalPrice: bookingData.totalPrice,
+        isRead: false,
+        createdAt: serverTimestamp()
+      });
+      
+      console.log('✅ Notificação enviada para o dono:', ownerId);
+      
+    } catch (error) {
+      console.error('❌ Erro ao notificar dono:', error);
+      // Não falhar a criação da reserva por causa da notificação
     }
   },
 
@@ -664,6 +736,239 @@ export const scheduleService = {
       return { id: docRef.id, courtId, date, time, reason };
     } catch (error) {
       console.error('❌ Erro ao bloquear horário:', error);
+      throw error;
+    }
+  }
+};
+
+// 🎯 SERVIÇOS DE DISPONIBILIDADE INTELIGENTE
+export const availabilityService = {
+  // Verificar disponibilidade de horário para jogadores
+  async getAvailableTimeSlots(courtId, date) {
+    try {
+      console.log('🔍 Verificando disponibilidade para jogadores:', { courtId, date });
+      
+      // Buscar reservas para a data e quadra
+      const bookingsQuery = query(
+        collection(db, 'bookings'),
+        where('courtId', '==', courtId),
+        where('date', '==', date)
+      );
+      const bookingsSnapshot = await getDocs(bookingsQuery);
+      const bookings = bookingsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Buscar horários bloqueados para a data e quadra
+      const blockedQuery = query(
+        collection(db, 'blockedSlots'),
+        where('courtId', '==', courtId),
+        where('date', '==', date)
+      );
+      const blockedSnapshot = await getDocs(blockedQuery);
+      const blockedSlots = blockedSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      // Gerar slots de horário (apenas disponíveis para jogadores)
+      const availableSlots = [];
+      const startHour = 8;
+      const endHour = 22;
+      
+      for (let hour = startHour; hour < endHour; hour++) {
+        const time = `${hour.toString().padStart(2, '0')}:00`;
+        
+        // Verificar se está reservado
+        const isBooked = bookings.some(booking => booking.time === time);
+        
+        // Verificar se está bloqueado
+        const isBlocked = blockedSlots.some(blocked => blocked.time === time);
+        
+        // Apenas adicionar se estiver disponível
+        if (!isBooked && !isBlocked) {
+          availableSlots.push({
+            time,
+            status: 'available',
+            courtId,
+            date
+          });
+        }
+      }
+      
+      console.log(`✅ Encontrados ${availableSlots.length} horários disponíveis para jogadores`);
+      return availableSlots;
+      
+    } catch (error) {
+      console.error('❌ Erro ao verificar disponibilidade:', error);
+      throw error;
+    }
+  },
+
+  // Verificar se um horário específico está disponível
+  async isTimeSlotAvailable(courtId, date, time) {
+    try {
+      console.log('🔍 Verificando disponibilidade específica:', { courtId, date, time });
+      
+      // Verificar reservas
+      const bookingsQuery = query(
+        collection(db, 'bookings'),
+        where('courtId', '==', courtId),
+        where('date', '==', date),
+        where('time', '==', time)
+      );
+      const bookingsSnapshot = await getDocs(bookingsQuery);
+      
+      // Verificar bloqueios
+      const blockedQuery = query(
+        collection(db, 'blockedSlots'),
+        where('courtId', '==', courtId),
+        where('date', '==', date),
+        where('time', '==', time)
+      );
+      const blockedSnapshot = await getDocs(blockedQuery);
+      
+      const isAvailable = bookingsSnapshot.empty && blockedSnapshot.empty;
+      
+      console.log(`✅ Horário ${time} está ${isAvailable ? 'disponível' : 'indisponível'}`);
+      return isAvailable;
+      
+    } catch (error) {
+      console.error('❌ Erro ao verificar disponibilidade específica:', error);
+      throw error;
+    }
+  },
+
+  // Buscar quadras com horários disponíveis para uma data
+  async getCourtsWithAvailability(date, sport = null, location = null) {
+    try {
+      console.log('🔍 Buscando quadras com disponibilidade:', { date, sport, location });
+      
+      // Buscar todas as quadras
+      const courtsQuery = query(collection(db, 'courts'));
+      const courtsSnapshot = await getDocs(courtsQuery);
+      let courts = courtsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Aplicar filtros
+      if (sport) {
+        courts = courts.filter(court => {
+          // Verificar se o esporte está na lista de esportes da quadra
+          const courtSports = court.sports || [court.sport];
+          return courtSports.some(courtSport => 
+            courtSport.toLowerCase().includes(sport.toLowerCase())
+          );
+        });
+      }
+      
+      if (location) {
+        courts = courts.filter(court => {
+          const searchLocation = location.toLowerCase();
+          return (
+            (court.address && court.address.toLowerCase().includes(searchLocation)) ||
+            (court.location && court.location.toLowerCase().includes(searchLocation)) ||
+            (court.establishmentName && court.establishmentName.toLowerCase().includes(searchLocation))
+          );
+        });
+      }
+      
+      // Verificar disponibilidade para cada quadra
+      const courtsWithAvailability = [];
+      
+      for (const court of courts) {
+        const availableSlots = await this.getAvailableTimeSlots(court.id, date);
+        
+        if (availableSlots.length > 0) {
+          courtsWithAvailability.push({
+            ...court,
+            availableSlots,
+            totalAvailableSlots: availableSlots.length
+          });
+        }
+      }
+      
+      console.log(`✅ Encontradas ${courtsWithAvailability.length} quadras com disponibilidade`);
+      return courtsWithAvailability;
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar quadras com disponibilidade:', error);
+      throw error;
+    }
+  }
+};
+
+// 🔔 SERVIÇOS DE NOTIFICAÇÕES
+export const notificationsService = {
+  // Buscar notificações do dono
+  async getOwnerNotifications(ownerId) {
+    try {
+      console.log('🔔 Buscando notificações para dono:', ownerId);
+      
+      const q = query(
+        collection(db, 'notifications'),
+        where('ownerId', '==', ownerId)
+      );
+      const querySnapshot = await getDocs(q);
+      const notifications = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Ordenar por data de criação (mais recente primeiro)
+      notifications.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt || 0);
+        const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+      
+      console.log(`✅ Encontradas ${notifications.length} notificações`);
+      return notifications;
+      
+    } catch (error) {
+      console.error('❌ Erro ao buscar notificações:', error);
+      throw error;
+    }
+  },
+
+  // Marcar notificação como lida
+  async markAsRead(notificationId) {
+    try {
+      await updateDoc(doc(db, 'notifications', notificationId), {
+        isRead: true,
+        readAt: serverTimestamp()
+      });
+      console.log('✅ Notificação marcada como lida:', notificationId);
+    } catch (error) {
+      console.error('❌ Erro ao marcar notificação como lida:', error);
+      throw error;
+    }
+  },
+
+  // Marcar todas as notificações como lidas
+  async markAllAsRead(ownerId) {
+    try {
+      const q = query(
+        collection(db, 'notifications'),
+        where('ownerId', '==', ownerId),
+        where('isRead', '==', false)
+      );
+      const querySnapshot = await getDocs(q);
+      
+      const batch = writeBatch(db);
+      querySnapshot.docs.forEach(doc => {
+        batch.update(doc.ref, {
+          isRead: true,
+          readAt: serverTimestamp()
+        });
+      });
+      
+      await batch.commit();
+      console.log('✅ Todas as notificações marcadas como lidas');
+    } catch (error) {
+      console.error('❌ Erro ao marcar todas as notificações como lidas:', error);
       throw error;
     }
   }

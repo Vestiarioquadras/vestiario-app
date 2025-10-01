@@ -162,7 +162,7 @@ const PWAInstallPrompt = () => {
           alignItems: 'center'
         }}>
           <img 
-            src="/logo_e_nome_sem_fundo.png" 
+            src="/logo_e_nome_sem_fundo1.png" 
             alt="Vestiário" 
             style={{ 
               maxWidth: '120px', 
@@ -214,7 +214,7 @@ const PWAInstallPrompt = () => {
             onClick={handleInstall}
             size="large"
             style={{
-              background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+              background: 'linear-gradient(135deg, #B1EC32 0%, #B1EC32 100%)',
               border: 'none',
               fontWeight: '600',
               height: '48px',

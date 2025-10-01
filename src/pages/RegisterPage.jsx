@@ -192,7 +192,7 @@ const RegisterPage = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#FEFFED',
         padding: '20px'
       }}>
         <Card
@@ -230,7 +230,7 @@ const RegisterPage = () => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: vestiarioGradients.primary,
+      background: '#FEFFED',
       padding: '20px'
     }}>
       <Card
@@ -253,7 +253,7 @@ const RegisterPage = () => {
             }} 
           />
           <Title level={3} style={{ 
-            color: '#ff5e0e', 
+            color: '#B1EC32', 
             marginBottom: '8px',
             fontWeight: 600
           }}>
@@ -333,7 +333,7 @@ const RegisterPage = () => {
               <span>
                 Tipo de Usuário
                 <Tooltip title="Escolha se você é um jogador que quer reservar quadras ou um dono de estabelecimento">
-                  <InfoCircleOutlined style={{ marginLeft: '4px', color: '#ff5e0e' }} />
+                  <InfoCircleOutlined style={{ marginLeft: '4px', color: '#B1EC32' }} />
                 </Tooltip>
               </span>
             }
@@ -439,7 +439,7 @@ const RegisterPage = () => {
               Eu concordo com a{' '}
               <Link 
                 onClick={() => setPrivacyModalOpen(true)}
-                style={{ color: '#ff5e0e' }}
+                style={{ color: '#B1EC32' }}
               >
                 Política de Privacidade
               </Link>
@@ -457,7 +457,7 @@ const RegisterPage = () => {
                 height: '48px',
                 fontSize: '16px',
                 fontWeight: '600',
-                background: vestiarioGradients.primary,
+                background: '#FEFFED',
                 border: 'none',
                 boxShadow: '0 4px 12px rgba(255, 94, 13, 0.3)',
                 ...vestiarioStyles.button

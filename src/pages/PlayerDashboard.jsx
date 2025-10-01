@@ -35,7 +35,7 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { sportsService, courtsService, bookingsService, favoritesService, matchHistoryService } from '../services/firestoreService'
+import { sportsService, courtsService, bookingsService, favoritesService, matchHistoryService, availabilityService } from '../services/firestoreService'
 import PaymentForm from '../components/PaymentForm'
 import Logo from '../components/Logo'
 import useResponsive from '../hooks/useResponsive'
@@ -64,6 +64,8 @@ const PlayerDashboard = () => {
     location: '',
     date: null
   })
+  const [selectedDate, setSelectedDate] = useState(null)
+  const [courtsWithAvailability, setCourtsWithAvailability] = useState([])
   const [bookingModalOpen, setBookingModalOpen] = useState(false)
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
   const [refreshing] = useState(false)
@@ -79,8 +81,34 @@ const PlayerDashboard = () => {
    */
   useEffect(() => {
     if (user?.uid) {
-    loadInitialData()
+      loadInitialData()
     }
+  }, [user?.uid])
+
+  /**
+   * Atualiza disponibilidade automaticamente quando a data ou filtros mudam
+   * Jogadores não precisam clicar em "Atualizar" - tudo é automático!
+   */
+  useEffect(() => {
+    if (user?.uid) {
+      console.log('🔄 Atualização automática para jogador:', { selectedDate, filters: searchFilters })
+      loadAvailabilityData()
+    }
+  }, [selectedDate, searchFilters.sport, searchFilters.location])
+
+  /**
+   * Atualização automática a cada 5 minutos para jogadores
+   * Mantém dados sempre atualizados sem intervenção manual
+   */
+  useEffect(() => {
+    if (!user?.uid) return
+
+    const interval = setInterval(() => {
+      console.log('🔄 Atualização automática de dados para jogador')
+      loadInitialData()
+    }, 5 * 60 * 1000) // 5 minutos
+
+    return () => clearInterval(interval)
   }, [user?.uid])
 
   const loadInitialData = async () => {
@@ -97,7 +125,11 @@ const PlayerDashboard = () => {
         bookingsService.getUserBookings(user.uid),
         favoritesService.getFavoriteCourts(user.uid),
         matchHistoryService.getMatchHistory(user.uid),
-        courtsService.getAllCourts()
+        availabilityService.getCourtsWithAvailability(
+          selectedDate ? selectedDate.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0], 
+          searchFilters.sport, 
+          searchFilters.location
+        )
       ])
       
       console.log('📊 Dados carregados:', {
@@ -112,12 +144,33 @@ const PlayerDashboard = () => {
       setBookings(bookingsData)
       setFavoriteCourts(favoritesData)
       setMatchHistory(historyData)
-      setCourts(courtsData)
+      setCourtsWithAvailability(courtsData)
     } catch (error) {
       console.error('❌ Erro ao carregar dados:', error)
       message.error('Erro ao carregar dados')
     } finally {
       setLoading(false)
+    }
+  }
+
+  /**
+   * Carrega dados de disponibilidade para a data selecionada
+   */
+  const loadAvailabilityData = async () => {
+    try {
+      const dateString = selectedDate ? selectedDate.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0]
+      console.log('🔄 Carregando disponibilidade para:', dateString)
+      const courtsData = await availabilityService.getCourtsWithAvailability(
+        dateString, 
+        searchFilters.sport, 
+        searchFilters.location
+      )
+      
+      console.log(`✅ Encontradas ${courtsData.length} quadras com disponibilidade`)
+      setCourtsWithAvailability(courtsData)
+    } catch (error) {
+      console.error('❌ Erro ao carregar disponibilidade:', error)
+      message.error('Erro ao carregar disponibilidade')
     }
   }
 
@@ -161,19 +214,31 @@ const PlayerDashboard = () => {
   const searchCourts = async () => {
     setLoading(true)
     try {
-      const courtsData = await courtsService.getAllCourts(searchFilters.sport, searchFilters.location)
-      setCourts(courtsData)
+      console.log('🔍 Buscando quadras com disponibilidade:', { 
+        date: selectedDate ? selectedDate.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0], 
+        sport: searchFilters.sport, 
+        location: searchFilters.location 
+      })
+      
+      const dateString = selectedDate ? selectedDate.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0]
+      const courtsData = await availabilityService.getCourtsWithAvailability(
+        dateString, 
+        searchFilters.sport, 
+        searchFilters.location
+      )
+      
+      setCourtsWithAvailability(courtsData)
       
       if (courtsData.length === 0) {
         notification.info({
-          message: 'Nenhum resultado encontrado',
-          description: 'Tente ajustar os filtros de busca',
+          message: 'Nenhuma quadra disponível',
+          description: 'Não há horários livres para esta data. Tente outra data ou ajuste os filtros.',
           placement: 'topRight'
         })
       } else {
         notification.success({
-          message: `${courtsData.length} estabelecimento(s) encontrado(s)`,
-          description: 'Confira os resultados abaixo',
+          message: `${courtsData.length} quadras encontradas`,
+          description: `Encontradas ${courtsData.length} quadras com horários disponíveis para ${selectedDate ? selectedDate.format('DD/MM/YYYY') : 'hoje'}`,
           placement: 'topRight'
         })
       }
@@ -343,14 +408,22 @@ const PlayerDashboard = () => {
         status: 'pending' // Mudar para 'pending' para que o dono possa confirmar
       }
 
-      // Salvar reserva no Firebase
-      await bookingsService.createBooking(bookingData)
+      // Salvar reserva no Firebase com status 'confirmed' (auto-confirmação)
+      const confirmedBookingData = {
+        ...bookingData,
+        status: 'confirmed', // Auto-confirmação após pagamento
+        paymentStatus: 'paid',
+        paymentDate: new Date().toISOString(),
+        confirmedAt: new Date().toISOString()
+      }
+      
+      await bookingsService.createBooking(confirmedBookingData)
 
-        notification.success({
-          message: 'Reserva confirmada com sucesso!',
-          description: `Quadra ${selectedBooking.courtName} reservada e paga`,
-          placement: 'topRight'
-        })
+      notification.success({
+        message: 'Reserva confirmada automaticamente!',
+        description: `Quadra ${selectedBooking.courtName} reservada e confirmada após pagamento`,
+        placement: 'topRight'
+      })
         setPaymentModalOpen(false)
         setSelectedBooking(null)
         loadInitialData()
@@ -552,7 +625,7 @@ const PlayerDashboard = () => {
             <div>
             <Title level={4} style={{ 
               margin: 0, 
-              color: '#ff5e0e',
+              color: '#B1EC32',
               fontWeight: '600',
               fontSize: isMobile ? '16px' : '20px',
               lineHeight: 1.2
@@ -596,277 +669,141 @@ const PlayerDashboard = () => {
           maxWidth: '1400px', 
           margin: '0 auto'
         }}>
-          {/* Boas-vindas */}
+          {/* Barra de Busca Centralizada */}
           <Card style={{ 
             marginBottom: isMobile ? '20px' : '32px', 
-            background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
+            background: 'linear-gradient(135deg, #B1EC32 0%, #8BC34A 100%)',
             border: 'none',
-            color: 'white',
-            borderRadius: '20px',
-            boxShadow: '0 10px 15px -3px rgba(255, 94, 14, 0.3), 0 4px 6px -2px rgba(255, 94, 14, 0.1)',
-            overflow: 'hidden',
-            position: 'relative'
+            borderRadius: '16px',
+            boxShadow: '0 8px 25px -5px rgba(177, 236, 50, 0.3), 0 4px 6px -2px rgba(177, 236, 50, 0.1)',
+            overflow: 'hidden'
           }}>
-            {/* Efeito de fundo decorativo */}
-            <div style={{
-              position: 'absolute',
-              top: '-50%',
-              right: '-20%',
-              width: '200px',
-              height: '200px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            <div style={{
-              position: 'absolute',
-              bottom: '-30%',
-              left: '-10%',
-              width: '150px',
-              height: '150px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            
-            <div style={{ 
-              display: 'flex', 
-              alignItems: isMobile ? 'flex-start' : 'center', 
-              marginBottom: '16px',
-              flexDirection: isMobile ? 'column' : 'row',
-              textAlign: isMobile ? 'center' : 'left',
-              position: 'relative',
-              zIndex: 2
-            }}>
-              {isMobile && (
-                <div style={{ marginBottom: '12px' }}>
-                  <Title level={3} style={{ margin: 0, color: 'white', fontWeight: '600' }}>
-                    Olá, {user?.name || 'Jogador'}! 👋
-                  </Title>
-                </div>
-              )}
-              <Logo size={isMobile ? "medium" : "large"} style={{ 
-                marginRight: isMobile ? '0' : '20px',
-                marginBottom: isMobile ? '12px' : '0',
-                filter: 'brightness(0) invert(1)'
-              }} />
-              <div>
-                <Title level={isMobile ? 3 : 2} style={{ margin: 0, color: 'white', fontWeight: '600' }}>
-                  Encontre seu esporte! 🏆
+            <div style={{ padding: isMobile ? '20px' : '32px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+                <Title level={isMobile ? 3 : 2} style={{ 
+                  margin: 0, 
+                  color: 'white', 
+                  fontWeight: '600',
+                  marginBottom: '8px'
+                }}>
+                  🔍 Encontre sua quadra ideal
                 </Title>
                 <Text style={{ 
                   fontSize: isMobile ? '14px' : '16px',
-                  display: isMobile ? 'block' : 'inline',
                   color: 'rgba(255, 255, 255, 0.9)',
-                  fontWeight: '400'
+                  display: 'block'
                 }}>
-                  Busque estabelecimentos, reserve quadras e conecte-se com outros jogadores.
+                  Busque por esporte, localização e data
                 </Text>
+              </div>
+              
+              {/* Filtros de busca */}
+              <Row gutter={[12, 12]}>
+                <Col xs={24} sm={8}>
+                  <Select
+                    placeholder="🏐 Esporte"
+                    style={{ width: '100%' }}
+                    size="large"
+                    value={searchFilters.sport}
+                    onChange={(value) => setSearchFilters(prev => ({ ...prev, sport: value }))}
+                    allowClear
+                  >
+                    {sports.map(sport => (
+                      <Option key={sport.id} value={sport.name}>
+                        {sport.name}
+                      </Option>
+                    ))}
+                  </Select>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <Select
+                    placeholder="📍 Localização"
+                    size="large"
+                    style={{ width: '100%' }}
+                    value={searchFilters.location}
+                    onChange={(value) => setSearchFilters(prev => ({ ...prev, location: value }))}
+                    allowClear
+                    showSearch
+                    filterOption={(input, option) =>
+                      (option?.children ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                  >
+                    <Option value="">Todas as localizações</Option>
+                    <Option value="São Paulo">São Paulo</Option>
+                    <Option value="Rio de Janeiro">Rio de Janeiro</Option>
+                    <Option value="Minas Gerais">Minas Gerais</Option>
+                    <Option value="Bahia">Bahia</Option>
+                    <Option value="Paraná">Paraná</Option>
+                    <Option value="Rio Grande do Sul">Rio Grande do Sul</Option>
+                    <Option value="Pernambuco">Pernambuco</Option>
+                    <Option value="Ceará">Ceará</Option>
+                    <Option value="Pará">Pará</Option>
+                    <Option value="Santa Catarina">Santa Catarina</Option>
+                    <Option value="Goiás">Goiás</Option>
+                    <Option value="Maranhão">Maranhão</Option>
+                    <Option value="Paraíba">Paraíba</Option>
+                    <Option value="Espírito Santo">Espírito Santo</Option>
+                    <Option value="Piauí">Piauí</Option>
+                    <Option value="Alagoas">Alagoas</Option>
+                    <Option value="Tocantins">Tocantins</Option>
+                    <Option value="Rio Grande do Norte">Rio Grande do Norte</Option>
+                    <Option value="Acre">Acre</Option>
+                    <Option value="Amapá">Amapá</Option>
+                    <Option value="Amazonas">Amazonas</Option>
+                    <Option value="Mato Grosso">Mato Grosso</Option>
+                    <Option value="Mato Grosso do Sul">Mato Grosso do Sul</Option>
+                    <Option value="Rondônia">Rondônia</Option>
+                    <Option value="Roraima">Roraima</Option>
+                    <Option value="Sergipe">Sergipe</Option>
+                    <Option value="Distrito Federal">Distrito Federal</Option>
+                  </Select>
+                </Col>
+                <Col xs={24} sm={8}>
+                  <DatePicker
+                    placeholder="📅 Data"
+                    size="large"
+                    style={{ width: '100%' }}
+                    value={selectedDate}
+                    onChange={(date) => {
+                      setSelectedDate(date)
+                      if (date) {
+                        const dateString = date.format('YYYY-MM-DD')
+                        setSearchFilters(prev => ({ ...prev, date: dateString }))
+                      }
+                    }}
+                  />
+                </Col>
+              </Row>
+              
+              <div style={{ textAlign: 'center', marginTop: '16px' }}>
+                <Button 
+                  type="primary" 
+                  size="large"
+                  icon={<SearchOutlined />}
+                  onClick={searchCourts}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    color: 'white',
+                    fontWeight: '600',
+                    height: '48px',
+                    paddingLeft: '24px',
+                    paddingRight: '24px'
+                  }}
+                >
+                  Buscar Quadras
+                </Button>
               </div>
             </div>
           </Card>
 
-          {/* BARRA DE PESQUISA GRANDE E CLARA */}
-          <Card id="search-section" style={{ 
-            marginBottom: isMobile ? '20px' : '32px', 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            border: 'none',
-            borderRadius: '20px',
-            boxShadow: '0 10px 15px -3px rgba(102, 126, 234, 0.3), 0 4px 6px -2px rgba(102, 126, 234, 0.1)',
-            overflow: 'hidden',
-            position: 'relative'
-          }}>
-            {/* Efeito de fundo decorativo */}
-            <div style={{
-              position: 'absolute',
-              top: '-30%',
-              right: '-15%',
-              width: '150px',
-              height: '150px',
-              background: 'rgba(255, 255, 255, 0.1)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            <div style={{
-              position: 'absolute',
-              bottom: '-20%',
-              left: '-10%',
-              width: '100px',
-              height: '100px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '50%',
-              zIndex: 1
-            }} />
-            
-            <Row gutter={isMobile ? [8, 8] : [16, 16]} align="middle" style={{ position: 'relative', zIndex: 2 }}>
-              <Col xs={24} sm={12} md={6}>
-                <div style={{ textAlign: 'center' }}>
-                  <Text style={{ 
-                    color: 'white', 
-                    fontSize: isMobile ? '14px' : '16px', 
-                    fontWeight: 'bold' 
-                  }}>
-                    🏃‍♂️ Esporte
-                  </Text>
-                  <br />
-                  <Select
-                    placeholder="Selecione o esporte"
-                    style={{ 
-                      width: '100%', 
-                      height: isMobile ? '44px' : '52px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      backdropFilter: 'blur(10px)'
-                    }}
-                    size={isMobile ? "middle" : "large"}
-                    value={searchFilters.sport}
-                    onChange={(value) => setSearchFilters({...searchFilters, sport: value})}
-                  >
-                    {sports && sports.map(sport => (
-                      <Select.Option key={sport.id} value={sport.name}>
-                        {sport.icon} {sport.name}
-                      </Select.Option>
-                    ))}
-                  </Select>
-                </div>
-              </Col>
-              <Col xs={24} sm={6}>
-                <div style={{ textAlign: 'center' }}>
-                  <Text style={{ color: 'white', fontSize: '16px', fontWeight: 'bold' }}>
-                    📍 Localização
-                  </Text>
-                  <br />
-                  <Select
-                    placeholder="Selecione o estado"
-                    value={searchFilters.location}
-                    onChange={(value) => setSearchFilters({...searchFilters, location: value})}
-                    style={{ 
-                      height: isMobile ? '44px' : '52px', 
-                      fontSize: '16px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      backdropFilter: 'blur(10px)',
-                      width: '100%'
-                    }}
-                    size={isMobile ? "middle" : "large"}
-                    suffixIcon={<EnvironmentOutlined style={{ color: 'white' }} />}
-                  >
-                    <Select.Option value="">Todos os estados</Select.Option>
-                    <Select.Option value="São Paulo">São Paulo</Select.Option>
-                    <Select.Option value="Rio de Janeiro">Rio de Janeiro</Select.Option>
-                    <Select.Option value="Minas Gerais">Minas Gerais</Select.Option>
-                    <Select.Option value="Bahia">Bahia</Select.Option>
-                    <Select.Option value="Paraná">Paraná</Select.Option>
-                    <Select.Option value="Rio Grande do Sul">Rio Grande do Sul</Select.Option>
-                    <Select.Option value="Pernambuco">Pernambuco</Select.Option>
-                    <Select.Option value="Ceará">Ceará</Select.Option>
-                    <Select.Option value="Pará">Pará</Select.Option>
-                    <Select.Option value="Santa Catarina">Santa Catarina</Select.Option>
-                    <Select.Option value="Goiás">Goiás</Select.Option>
-                    <Select.Option value="Maranhão">Maranhão</Select.Option>
-                    <Select.Option value="Paraíba">Paraíba</Select.Option>
-                    <Select.Option value="Espírito Santo">Espírito Santo</Select.Option>
-                    <Select.Option value="Piauí">Piauí</Select.Option>
-                    <Select.Option value="Alagoas">Alagoas</Select.Option>
-                    <Select.Option value="Tocantins">Tocantins</Select.Option>
-                    <Select.Option value="Rio Grande do Norte">Rio Grande do Norte</Select.Option>
-                    <Select.Option value="Acre">Acre</Select.Option>
-                    <Select.Option value="Amapá">Amapá</Select.Option>
-                    <Select.Option value="Amazonas">Amazonas</Select.Option>
-                    <Select.Option value="Mato Grosso">Mato Grosso</Select.Option>
-                    <Select.Option value="Mato Grosso do Sul">Mato Grosso do Sul</Select.Option>
-                    <Select.Option value="Rondônia">Rondônia</Select.Option>
-                    <Select.Option value="Roraima">Roraima</Select.Option>
-                    <Select.Option value="Sergipe">Sergipe</Select.Option>
-                    <Select.Option value="Distrito Federal">Distrito Federal</Select.Option>
-                  </Select>
-                </div>
-              </Col>
-              <Col xs={24} sm={6}>
-                <div style={{ textAlign: 'center' }}>
-                  <Text style={{ color: 'white', fontSize: '16px', fontWeight: 'bold' }}>
-                    📅 Data
-                  </Text>
-                  <br />
-                  <DatePicker
-                    style={{ 
-                      width: '100%', 
-                      height: isMobile ? '44px' : '52px',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255, 255, 255, 0.2)',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      backdropFilter: 'blur(10px)'
-                    }}
-                    size="large"
-                    placeholder="Selecione a data"
-                    value={searchFilters.date}
-                    onChange={(date) => setSearchFilters({...searchFilters, date})}
-                  />
-                </div>
-              </Col>
-              <Col xs={24} sm={6}>
-                <div style={{ textAlign: 'center' }}>
-                  <Text style={{ color: 'white', fontSize: '16px', fontWeight: 'bold' }}>
-                    🔍 Buscar
-                  </Text>
-                  <br />
-                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                    <Button 
-                      type="primary" 
-                      size="large"
-                      icon={<SearchOutlined />}
-                      onClick={searchCourts}
-                      loading={loading}
-                      style={{ 
-                        height: isMobile ? '44px' : '52px', 
-                        width: '100%',
-                        fontSize: '16px',
-                        fontWeight: '600',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
-                        border: 'none',
-                        boxShadow: '0 4px 12px rgba(255, 94, 14, 0.3)',
-                        transition: 'all 0.2s cubic-bezier(0.645, 0.045, 0.355, 1)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.target.style.transform = 'translateY(-2px)'
-                        e.target.style.boxShadow = '0 6px 16px rgba(255, 94, 14, 0.4)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.target.style.transform = 'translateY(0)'
-                        e.target.style.boxShadow = '0 4px 12px rgba(255, 94, 14, 0.3)'
-                      }}
-                    >
-                      Buscar Quadras
-                    </Button>
-                    <Button 
-                      size="small"
-                      icon={<ReloadOutlined />}
-                      onClick={loadInitialData}
-                      loading={refreshing}
-                      style={{ 
-                        width: '100%',
-                        background: 'rgba(255,255,255,0.2)',
-                        border: '1px solid rgba(255,255,255,0.3)',
-                        color: 'white'
-                      }}
-                    >
-                      Atualizar
-                    </Button>
-                  </Space>
-                </div>
-              </Col>
-            </Row>
-          </Card>
 
           {/* Indicador de Quadra Favorita Selecionada */}
           {selectedFavoriteCourt && (
             <Card style={{ 
               marginBottom: '24px', 
-              background: 'linear-gradient(135deg, #ff5e0e 0%, #ff8c42 100%)',
-              border: '2px solid #ff5e0e'
+              background: 'linear-gradient(135deg, #B1EC32 0%, #B1EC32 100%)',
+              border: '2px solid #B1EC32'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -950,11 +887,24 @@ const PlayerDashboard = () => {
             )}
           </Card>
 
-          {/* Lista de Estabelecimentos */}
-          {courts && courts.length > 0 && (
-            <Card title="Estabelecimentos Encontrados" style={{ marginBottom: '24px' }}>
+          {/* Lista de Estabelecimentos com Disponibilidade */}
+          {courtsWithAvailability && courtsWithAvailability.length > 0 && (
+            <Card title="🏟️ Quadras Disponíveis" style={{ marginBottom: '24px' }}>
+              <div style={{ marginBottom: '16px', padding: '12px', background: '#f6ffed', borderRadius: '8px', border: '1px solid #b7eb8f' }}>
+                <Text strong style={{ color: '#52c41a' }}>
+                  🎯 Mostrando apenas quadras com horários disponíveis para {selectedDate ? selectedDate.format('DD/MM/YYYY') : 'hoje'}
+                </Text>
+                <br />
+                <Text type="secondary" style={{ fontSize: '14px' }}>
+                  Horários bloqueados ou ocupados não aparecem para jogadores
+                </Text>
+                <br />
+                <Text type="secondary" style={{ fontSize: '12px', color: '#8c8c8c' }}>
+                  🔄 Dados atualizados automaticamente - você não precisa clicar em "Atualizar"!
+                </Text>
+              </div>
               <Row gutter={[16, 16]}>
-                {courts && courts.map(court => (
+                {courtsWithAvailability && courtsWithAvailability.map(court => (
                   <Col xs={24} md={12} key={court.id}>
                     <Card 
                       hoverable
@@ -987,7 +937,7 @@ const PlayerDashboard = () => {
                         </Text>
                         <br />
                         <Text type="secondary">
-                          <TeamOutlined /> {court.sports ? court.sports.join(', ') : court.sport || 'Não informado'}
+                          <TeamOutlined /> {(court.sports || [court.sport]).join(', ') || 'Não informado'}
                         </Text>
                         <br />
                         <Text type="secondary">
@@ -997,7 +947,16 @@ const PlayerDashboard = () => {
                         <Text strong>Preço:</Text> R$ {court.price}/hora
                         <br />
                         <Text strong>Status:</Text> 
-                                  <Tag color="green" style={{ marginLeft: '8px' }}>Disponível</Tag>
+                        <Tag color="green" style={{ marginLeft: '8px' }}>Disponível</Tag>
+                        <br />
+                        <Text strong>Horários Livres:</Text> 
+                        <Tag color="blue" style={{ marginLeft: '8px' }}>
+                          {court.totalAvailableSlots} horários
+                        </Tag>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          Próximos horários: {court.availableSlots?.slice(0, 3).map(slot => slot.time).join(', ')}
+                        </Text>
                       </div>
                     </Card>
                   </Col>
@@ -1024,7 +983,7 @@ const PlayerDashboard = () => {
                       <div><strong>⏰</strong> {booking.time}</div>
                       <div><strong>💰</strong> R$ {booking.totalPrice?.toFixed(2)}</div>
                       <div style={{ marginTop: '8px' }}>
-                        <Tag color={booking.status === 'confirmed' ? 'green' : booking.status === 'pending' ? 'orange' : 'red'}>
+                        <Tag color={booking.status === 'confirmed' ? 'green' : booking.status === 'pending' ? 'green' : 'red'}>
                           {booking.status === 'confirmed' ? 'Confirmada' : booking.status === 'pending' ? 'Pendente' : 'Cancelada'}
                         </Tag>
                       </div>
@@ -1077,7 +1036,7 @@ const PlayerDashboard = () => {
                   dataIndex: 'status',
                   key: 'status',
                   render: (status) => (
-                    <Tag color={status === 'confirmed' ? 'green' : status === 'pending' ? 'orange' : 'red'}>
+                    <Tag color={status === 'confirmed' ? 'green' : status === 'pending' ? 'green' : 'red'}>
                       {status === 'confirmed' ? 'Confirmada' : status === 'pending' ? 'Pendente' : 'Cancelada'}
                     </Tag>
                   )
@@ -1189,7 +1148,7 @@ const PlayerDashboard = () => {
                         type="link" 
                         onClick={() => setShowAllMatches(true)}
                         style={{ 
-                          color: '#ff5e0e',
+                          color: '#B1EC32',
                           fontWeight: 500
                         }}
                       >
@@ -1386,7 +1345,7 @@ const PlayerDashboard = () => {
           <div style={{ padding: '16px 0' }}>
             <div style={{ marginBottom: '24px', textAlign: 'center' }}>
               <Logo size="medium" />
-              <Title level={4} style={{ margin: '12px 0 0 0', color: '#ff5e0e' }}>
+              <Title level={4} style={{ margin: '12px 0 0 0', color: '#B1EC32' }}>
                 Olá, {user?.name || 'Jogador'}! 👋
               </Title>
               <Text type="secondary">

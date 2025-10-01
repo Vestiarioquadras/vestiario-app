@@ -11,7 +11,7 @@ const PrivacyPolicyModal = ({ open, onCancel }) => {
   return (
     <Modal
       title={
-        <div style={{ textAlign: 'center', color: '#ff5e0d' }}>
+        <div style={{ textAlign: 'center', color: '#B1EC32' }}>
           🔒 Política de Privacidade
         </div>
       }
@@ -32,7 +32,7 @@ const PrivacyPolicyModal = ({ open, onCancel }) => {
           padding: '15px', 
           borderRadius: '6px',
           marginBottom: '20px',
-          borderLeft: '4px solid #ff5e0d'
+          borderLeft: '4px solid #B1EC32'
         }}>
           <Text strong>Última atualização:</Text> 15 de setembro de 2024
         </div>
