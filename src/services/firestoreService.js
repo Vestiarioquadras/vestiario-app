@@ -5,6 +5,7 @@ import {
   getDocs, 
   getDoc, 
   addDoc, 
+  setDoc,
   updateDoc, 
   deleteDoc, 
   query, 
@@ -669,7 +670,9 @@ export const scheduleService = {
       const courts = Array.isArray(courtsQuery) ? courtsQuery : courtsQuery.docs;
       
       // Gerar dados da agenda para cada quadra
-      return courts.map(court => {
+      const agendaData = [];
+      
+      for (const court of courts) {
         const courtData = court.data ? court.data() : court;
         const courtId = court.id;
         
@@ -677,13 +680,29 @@ export const scheduleService = {
         const courtBookings = bookings.filter(b => b.courtId === courtId);
         const courtBlockedSlots = blockedSlots.filter(b => b.courtId === courtId);
         
-        // Gerar slots de horário
-        const timeSlots = [];
-        const startHour = 8;
-        const endHour = 22;
+        // 🔄 Buscar horários de funcionamento configurados
+        let scheduleSlots = [];
+        try {
+          scheduleSlots = await courtScheduleService.generateAvailableSlots(courtId, date);
+        } catch (error) {
+          console.log('⚠️ Usando horários padrão para quadra:', courtId);
+          // Fallback para horários padrão se não houver configuração
+          scheduleSlots = [];
+          for (let hour = 8; hour < 22; hour++) {
+            scheduleSlots.push({
+              time: `${hour.toString().padStart(2, '0')}:00`,
+              status: 'available',
+              courtId,
+              date
+            });
+          }
+        }
         
-        for (let hour = startHour; hour < endHour; hour++) {
-          const time = `${hour.toString().padStart(2, '0')}:00`;
+        // Gerar slots de horário baseado nos horários de funcionamento
+        const timeSlots = [];
+        
+        for (const scheduleSlot of scheduleSlots) {
+          const time = scheduleSlot.time;
           const booking = courtBookings.find(b => b.time === time);
           const blocked = courtBlockedSlots.find(b => b.time === time);
           
@@ -709,13 +728,15 @@ export const scheduleService = {
           }
         }
         
-        return {
+        agendaData.push({
           id: courtId,
           courtId,
           courtName: courtData.name,
           timeSlots
-        };
-      });
+        });
+      }
+      
+      return agendaData;
     } catch (error) {
       console.error('❌ Erro ao buscar dados da agenda:', error);
       throw error;
@@ -741,6 +762,146 @@ export const scheduleService = {
   }
 };
 
+// ⏰ SERVIÇOS DE HORÁRIOS DE FUNCIONAMENTO
+export const courtScheduleService = {
+  // Definir horários de funcionamento de uma quadra
+  async setCourtSchedule(courtId, scheduleData) {
+    try {
+      console.log('⏰ Definindo horários de funcionamento:', { courtId, scheduleData });
+      
+      const scheduleRef = doc(db, 'courtSchedules', courtId);
+      await setDoc(scheduleRef, {
+        courtId,
+        ...scheduleData,
+        updatedAt: serverTimestamp()
+      });
+      
+      console.log('✅ Horários de funcionamento definidos com sucesso');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao definir horários:', error);
+      throw error;
+    }
+  },
+
+  // Buscar horários de funcionamento de uma quadra
+  async getCourtSchedule(courtId) {
+    try {
+      const scheduleRef = doc(db, 'courtSchedules', courtId);
+      const scheduleDoc = await getDoc(scheduleRef);
+      
+      if (scheduleDoc.exists()) {
+        return { id: scheduleDoc.id, ...scheduleDoc.data() };
+      } else {
+        // Retornar horários padrão se não existir
+        return {
+          id: courtId,
+          isOpen24h: false,
+          weekdays: {
+            monday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+            tuesday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+            wednesday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+            thursday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+            friday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+            saturday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+            sunday: { isOpen: true, openTime: '08:00', closeTime: '22:00' }
+          },
+          specialDays: [],
+          timeSlotDuration: 60, // minutos
+          isDefault: true
+        };
+      }
+    } catch (error) {
+      console.error('❌ Erro ao buscar horários:', error);
+      throw error;
+    }
+  },
+
+  // Verificar se a quadra está aberta em um horário específico
+  async isCourtOpen(courtId, date, time) {
+    try {
+      const schedule = await this.getCourtSchedule(courtId);
+      const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'lowercase' });
+      const daySchedule = schedule.weekdays[dayOfWeek];
+      
+      if (!daySchedule || !daySchedule.isOpen) {
+        return false;
+      }
+      
+      const requestedTime = time.split(':').map(Number);
+      const openTime = daySchedule.openTime.split(':').map(Number);
+      const closeTime = daySchedule.closeTime.split(':').map(Number);
+      
+      const requestedMinutes = requestedTime[0] * 60 + requestedTime[1];
+      const openMinutes = openTime[0] * 60 + openTime[1];
+      const closeMinutes = closeTime[0] * 60 + closeTime[1];
+      
+      return requestedMinutes >= openMinutes && requestedMinutes < closeMinutes;
+    } catch (error) {
+      console.error('❌ Erro ao verificar horário de funcionamento:', error);
+      return false;
+    }
+  },
+
+  // Gerar slots de horário disponíveis baseado no funcionamento
+  async generateAvailableSlots(courtId, date) {
+    try {
+      console.log('⏰ Gerando slots para:', { courtId, date });
+      const schedule = await this.getCourtSchedule(courtId);
+      console.log('⏰ Horários configurados:', schedule.weekdays);
+      
+      // Corrigir interpretação de data - forçar fuso horário local
+      const [year, month, day] = date.split('-');
+      const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      console.log('⏰ Data original:', date);
+      console.log('⏰ Data corrigida:', dateObj);
+      console.log('⏰ Dia da semana (en-US):', dayOfWeek);
+      console.log('⏰ Dia da semana (pt-BR):', dateObj.toLocaleDateString('pt-BR', { weekday: 'long' }));
+      
+      const daySchedule = schedule.weekdays[dayOfWeek];
+      console.log('⏰ Horário do dia:', daySchedule);
+      
+      if (!daySchedule || !daySchedule.isOpen) {
+        return [];
+      }
+      
+      const slots = [];
+      const openTime = daySchedule.openTime.split(':').map(Number);
+      const closeTime = daySchedule.closeTime.split(':').map(Number);
+      const slotDuration = schedule.timeSlotDuration || 60;
+      
+      console.log('⏰ Horários de funcionamento:', { 
+        openTime: daySchedule.openTime, 
+        closeTime: daySchedule.closeTime,
+        slotDuration 
+      });
+      
+      const openMinutes = openTime[0] * 60 + openTime[1];
+      const closeMinutes = closeTime[0] * 60 + closeTime[1];
+      
+      for (let minutes = openMinutes; minutes < closeMinutes; minutes += slotDuration) {
+        const hour = Math.floor(minutes / 60);
+        const minute = minutes % 60;
+        const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        
+        slots.push({
+          time: timeString,
+          status: 'available',
+          courtId,
+          date
+        });
+      }
+      
+      console.log('⏰ Slots gerados:', slots);
+      return slots;
+    } catch (error) {
+      console.error('❌ Erro ao gerar slots disponíveis:', error);
+      return [];
+    }
+  }
+};
+
 // 🎯 SERVIÇOS DE DISPONIBILIDADE INTELIGENTE
 export const availabilityService = {
   // Verificar disponibilidade de horário para jogadores
@@ -748,7 +909,15 @@ export const availabilityService = {
     try {
       console.log('🔍 Verificando disponibilidade para jogadores:', { courtId, date });
       
-      // Buscar reservas para a data e quadra
+      // 1. Primeiro, verificar se a quadra está aberta neste horário
+      const scheduleSlots = await courtScheduleService.generateAvailableSlots(courtId, date);
+      
+      if (scheduleSlots.length === 0) {
+        console.log('❌ Quadra não está aberta nesta data');
+        return [];
+      }
+      
+      // 2. Buscar reservas para a data e quadra
       const bookingsQuery = query(
         collection(db, 'bookings'),
         where('courtId', '==', courtId),
@@ -760,7 +929,7 @@ export const availabilityService = {
         ...doc.data()
       }));
 
-      // Buscar horários bloqueados para a data e quadra
+      // 3. Buscar horários bloqueados para a data e quadra
       const blockedQuery = query(
         collection(db, 'blockedSlots'),
         where('courtId', '==', courtId),
@@ -772,30 +941,13 @@ export const availabilityService = {
         ...doc.data()
       }));
 
-      // Gerar slots de horário (apenas disponíveis para jogadores)
-      const availableSlots = [];
-      const startHour = 8;
-      const endHour = 22;
-      
-      for (let hour = startHour; hour < endHour; hour++) {
-        const time = `${hour.toString().padStart(2, '0')}:00`;
+      // 4. Filtrar slots baseado em reservas e bloqueios
+      const availableSlots = scheduleSlots.filter(slot => {
+        const isBooked = bookings.some(booking => booking.time === slot.time);
+        const isBlocked = blockedSlots.some(blocked => blocked.time === slot.time);
         
-        // Verificar se está reservado
-        const isBooked = bookings.some(booking => booking.time === time);
-        
-        // Verificar se está bloqueado
-        const isBlocked = blockedSlots.some(blocked => blocked.time === time);
-        
-        // Apenas adicionar se estiver disponível
-        if (!isBooked && !isBlocked) {
-          availableSlots.push({
-            time,
-            status: 'available',
-            courtId,
-            date
-          });
-        }
-      }
+        return !isBooked && !isBlocked;
+      });
       
       console.log(`✅ Encontrados ${availableSlots.length} horários disponíveis para jogadores`);
       return availableSlots;

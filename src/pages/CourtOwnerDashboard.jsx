@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import dayjs from 'dayjs'
 import {
   Layout,
   Typography,
@@ -25,7 +26,8 @@ import {
   Skeleton,
   Tabs,
   DatePicker,
-  TimePicker
+  TimePicker,
+  Switch
 } from 'antd'
 import { 
   ShopOutlined, 
@@ -53,7 +55,7 @@ import {
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { courtsService, sportsService, bookingsService, statsService, scheduleService, notificationsService } from '../services/firestoreService'
+import { courtsService, sportsService, bookingsService, statsService, scheduleService, courtScheduleService, notificationsService } from '../services/firestoreService'
 import Logo from '../components/Logo'
 import ImageUploadSimple from '../components/ImageUploadSimple'
 import useResponsive from '../hooks/useResponsive'
@@ -90,6 +92,9 @@ const CourtOwnerDashboard = () => {
   const [courtImages, setCourtImages] = useState([])
   const [notifications, setNotifications] = useState([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
+  const [selectedCourtForSchedule, setSelectedCourtForSchedule] = useState(null)
+  const [courtSchedule, setCourtSchedule] = useState(null)
   const [form] = Form.useForm()
   const [blockForm] = Form.useForm()
   const [settingsForm] = Form.useForm()
@@ -201,7 +206,11 @@ const CourtOwnerDashboard = () => {
 
   const loadScheduleData = async () => {
     try {
+      const dateObj = new Date(selectedDate)
+      const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })
+      console.log('📅 Carregando agenda para data:', selectedDate, `(${dayName})`)
       const data = await scheduleService.getScheduleData(selectedDate)
+      console.log('📅 Dados da agenda recebidos:', data)
       setScheduleData(data)
     } catch (error) {
       console.error('Erro ao carregar agenda:', error)
@@ -345,6 +354,115 @@ const CourtOwnerDashboard = () => {
     } catch (error) {
       console.error('Erro ao excluir quadra:', error)
       message.error('Erro ao excluir quadra')
+    }
+  }
+
+  /**
+   * Abre modal para configurar horários de funcionamento
+   */
+  const openScheduleModal = async (court) => {
+    setSelectedCourtForSchedule(court)
+    setScheduleModalOpen(true)
+    
+    try {
+      // Carregar horários atuais da quadra
+      const schedule = await courtScheduleService.getCourtSchedule(court.id)
+      setCourtSchedule(schedule)
+      
+      // Preencher formulário com dados atuais
+      const formValues = {
+        timeSlotDuration: schedule.timeSlotDuration || 60,
+        isOpen24h: schedule.isOpen24h || false
+      }
+      
+      // Converter horários para objetos dayjs
+      if (schedule.weekdays) {
+        Object.keys(schedule.weekdays).forEach(day => {
+          const dayData = schedule.weekdays[day]
+          if (dayData) {
+            formValues[day] = {
+              isOpen: dayData.isOpen || false,
+              openTime: dayData.openTime ? dayjs(dayData.openTime, 'HH:mm') : null,
+              closeTime: dayData.closeTime ? dayjs(dayData.closeTime, 'HH:mm') : null
+            }
+          }
+        })
+      }
+      
+      settingsForm.setFieldsValue(formValues)
+    } catch (error) {
+      console.error('Erro ao carregar horários:', error)
+      message.error('Erro ao carregar configurações de horário')
+    }
+  }
+
+  /**
+   * Salva configurações de horário
+   */
+  const handleSaveSchedule = async (values) => {
+    try {
+      // Função auxiliar para converter dayjs para string
+      const formatTime = (timeValue) => {
+        if (!timeValue) return '08:00'
+        if (typeof timeValue === 'string') return timeValue
+        if (timeValue.format) return timeValue.format('HH:mm')
+        return '08:00'
+      }
+
+      const scheduleData = {
+        timeSlotDuration: values.timeSlotDuration || 60,
+        isOpen24h: values.isOpen24h || false,
+        weekdays: {
+          monday: {
+            isOpen: values.monday?.isOpen || false,
+            openTime: formatTime(values.monday?.openTime),
+            closeTime: formatTime(values.monday?.closeTime)
+          },
+          tuesday: {
+            isOpen: values.tuesday?.isOpen || false,
+            openTime: formatTime(values.tuesday?.openTime),
+            closeTime: formatTime(values.tuesday?.closeTime)
+          },
+          wednesday: {
+            isOpen: values.wednesday?.isOpen || false,
+            openTime: formatTime(values.wednesday?.openTime),
+            closeTime: formatTime(values.wednesday?.closeTime)
+          },
+          thursday: {
+            isOpen: values.thursday?.isOpen || false,
+            openTime: formatTime(values.thursday?.openTime),
+            closeTime: formatTime(values.thursday?.closeTime)
+          },
+          friday: {
+            isOpen: values.friday?.isOpen || false,
+            openTime: formatTime(values.friday?.openTime),
+            closeTime: formatTime(values.friday?.closeTime)
+          },
+          saturday: {
+            isOpen: values.saturday?.isOpen || false,
+            openTime: formatTime(values.saturday?.openTime),
+            closeTime: formatTime(values.saturday?.closeTime)
+          },
+          sunday: {
+            isOpen: values.sunday?.isOpen || false,
+            openTime: formatTime(values.sunday?.openTime),
+            closeTime: formatTime(values.sunday?.closeTime)
+          }
+        }
+      }
+      
+      await courtScheduleService.setCourtSchedule(selectedCourtForSchedule.id, scheduleData)
+      message.success('Horários de funcionamento salvos com sucesso!')
+      
+      // 🔄 Atualizar agenda automaticamente após salvar horários
+      console.log('🔄 Atualizando agenda após alteração de horários...')
+      await loadScheduleData()
+      
+      setScheduleModalOpen(false)
+      setSelectedCourtForSchedule(null)
+    } catch (error) {
+      console.error('Erro ao salvar horários:', error)
+      message.error('Erro ao salvar configurações')
     }
   }
 
@@ -620,8 +738,8 @@ const CourtOwnerDashboard = () => {
     },
     {
       title: 'Cliente',
-      dataIndex: 'userName',
-      key: 'userName',
+      dataIndex: 'playerName',
+      key: 'playerName',
     },
     {
       title: 'Esporte',
@@ -672,13 +790,15 @@ const CourtOwnerDashboard = () => {
               Confirmar
             </Button>
           )}
-          <Button 
-            size="small" 
-            danger
-            onClick={() => handleCancelBooking(record.id)}
-          >
-            Cancelar
-          </Button>
+          {record.status !== 'cancelled' && (
+            <Button 
+              size="small" 
+              danger
+              onClick={() => handleCancelBooking(record.id)}
+            >
+              Cancelar
+            </Button>
+          )}
         </Space>
       )
     }
@@ -1071,45 +1191,57 @@ const CourtOwnerDashboard = () => {
             <Row gutter={[16, 16]}>
               {scheduleData && scheduleData.length > 0 ? scheduleData
                 .filter(court => !selectedCourt || court.courtId === selectedCourt)
-                .map(court => (
-                <Col xs={24} lg={8} key={court.courtId}>
-                  <Card 
-                    size="small"
-                    title={
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <div 
-                          style={{ 
-                            width: '12px', 
-                            height: '12px', 
-                            backgroundColor: getCourtColor(court.courtId),
-                            borderRadius: '50%',
-                            marginRight: '8px'
-                          }}
-                        />
-                        {court.courtName}
-                      </div>
-                    }
-                    style={{ 
-                      border: `3px solid ${getCourtColor(court.courtId)}`,
-                      borderRadius: '12px'
-                    }}
-                  >
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(3, 1fr)', 
-                      gap: '4px',
-                      maxHeight: '400px',
-                      overflowY: 'auto'
-                    }}>
-                      {court.timeSlots && court.timeSlots.map((timeSlot, index) => (
-                        <div key={index}>
-                          {renderTimeSlot(timeSlot, court.courtId)}
+                .map(court => {
+                  console.log('🏟️ Renderizando quadra:', court.courtName, 'timeSlots:', court.timeSlots)
+                  return (
+                    <Col xs={24} lg={8} key={court.courtId}>
+                      <Card 
+                        size="small"
+                        title={
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <div 
+                              style={{ 
+                                width: '12px', 
+                                height: '12px', 
+                                backgroundColor: getCourtColor(court.courtId),
+                                borderRadius: '50%',
+                                marginRight: '8px'
+                              }}
+                            />
+                            {court.courtName}
+                          </div>
+                        }
+                        style={{ 
+                          border: `3px solid ${getCourtColor(court.courtId)}`,
+                          borderRadius: '12px'
+                        }}
+                      >
+                        <div style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: 'repeat(3, 1fr)', 
+                          gap: '4px',
+                          maxHeight: '400px',
+                          overflowY: 'auto'
+                        }}>
+                          {court.timeSlots && court.timeSlots.length > 0 ? court.timeSlots.map((timeSlot, index) => (
+                            <div key={index}>
+                              {renderTimeSlot(timeSlot, court.courtId)}
+                            </div>
+                          )) : (
+                            <div style={{ 
+                              gridColumn: '1 / -1', 
+                              textAlign: 'center', 
+                              padding: '20px',
+                              color: '#999'
+                            }}>
+                              <Text type="secondary">Nenhum horário disponível</Text>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                  </Card>
-                </Col>
-              )) : (
+                      </Card>
+                    </Col>
+                  )
+                }) : (
                 <Col span={24}>
                   <Empty 
                     description="Nenhum horário disponível para esta data"
@@ -1221,6 +1353,12 @@ const CourtOwnerDashboard = () => {
                             icon={<EditOutlined />} 
                             onClick={() => openEditCourtModal(court)}
                             title="Editar quadra"
+                          />
+                          <Button 
+                            size="small" 
+                            icon={<ClockCircleOutlined />} 
+                            onClick={() => openScheduleModal(court)}
+                            title="Configurar horários de funcionamento"
                           />
                           <Button 
                             size="small" 
@@ -1408,13 +1546,15 @@ const CourtOwnerDashboard = () => {
                               Confirmar
                             </Button>
                           )}
-                          <Button 
-                            size="small" 
-                            danger 
-                            onClick={() => handleCancelBooking(booking.id)}
-                          >
-                            Cancelar
-                          </Button>
+                          {booking.status !== 'cancelled' && (
+                            <Button 
+                              size="small" 
+                              danger 
+                              onClick={() => handleCancelBooking(booking.id)}
+                            >
+                              Cancelar
+                            </Button>
+                          )}
                         </Space>
                       </div>
                     </div>
@@ -1815,6 +1955,106 @@ const CourtOwnerDashboard = () => {
                 </Button>
                 <Button type="primary" htmlType="submit">
                   Salvar
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+
+        {/* Modal de Configuração de Horários */}
+        <Modal
+          title={`⏰ Configurar Horários - ${selectedCourtForSchedule?.name}`}
+          open={scheduleModalOpen}
+          onCancel={() => setScheduleModalOpen(false)}
+          footer={null}
+          width={800}
+        >
+          <Form
+            form={settingsForm}
+            layout="vertical"
+            onFinish={handleSaveSchedule}
+          >
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  name="timeSlotDuration"
+                  label="⏱️ Duração dos Horários (minutos)"
+                  rules={[{ required: true, message: 'Selecione a duração!' }]}
+                >
+                  <Select placeholder="Selecione a duração">
+                    <Select.Option value={30}>30 minutos</Select.Option>
+                    <Select.Option value={60}>1 hora</Select.Option>
+                    <Select.Option value={90}>1h30</Select.Option>
+                    <Select.Option value={120}>2 horas</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  name="isOpen24h"
+                  label="🕐 Funcionamento 24h"
+                  valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Divider>📅 Horários por Dia da Semana</Divider>
+
+            {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day, index) => {
+              const dayNames = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+              return (
+                <Card key={day} size="small" style={{ marginBottom: '16px' }}>
+                  <Row gutter={16} align="middle">
+                    <Col span={6}>
+                      <Form.Item
+                        name={[day, 'isOpen']}
+                        valuePropName="checked"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <Switch />
+                      </Form.Item>
+                      <Text strong>{dayNames[index]}</Text>
+                    </Col>
+                    <Col span={9}>
+                      <Form.Item
+                        name={[day, 'openTime']}
+                        label="Abertura"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <TimePicker 
+                          format="HH:mm" 
+                          style={{ width: '100%' }}
+                          placeholder="08:00"
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={9}>
+                      <Form.Item
+                        name={[day, 'closeTime']}
+                        label="Fechamento"
+                        style={{ marginBottom: 0 }}
+                      >
+                        <TimePicker 
+                          format="HH:mm" 
+                          style={{ width: '100%' }}
+                          placeholder="22:00"
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </Card>
+              )
+            })}
+
+            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+              <Space>
+                <Button onClick={() => setScheduleModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="primary" htmlType="submit">
+                  Salvar Horários
                 </Button>
               </Space>
             </Form.Item>

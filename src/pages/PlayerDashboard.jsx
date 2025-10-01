@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import dayjs from 'dayjs'
 import {
   Layout,
   Typography,
@@ -17,7 +18,8 @@ import {
   message,
   notification,
   Divider,
-  Drawer
+  Drawer,
+  Spin
 } from 'antd'
 import { 
   UserOutlined, 
@@ -75,6 +77,8 @@ const PlayerDashboard = () => {
   const [calculatedPrice, setCalculatedPrice] = useState(0)
   const [form] = Form.useForm()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([])
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false)
 
   /**
    * Carrega dados iniciais quando o usuário é carregado
@@ -262,11 +266,33 @@ const PlayerDashboard = () => {
   }
 
   /**
+   * Carrega horários disponíveis para uma data específica
+   */
+  const loadTimeSlotsForDate = async (courtId, date) => {
+    setLoadingTimeSlots(true)
+    try {
+      const dateString = date.format('YYYY-MM-DD')
+      console.log('🔍 Carregando horários disponíveis para:', { courtId, date: dateString })
+      
+      const timeSlots = await availabilityService.getAvailableTimeSlots(courtId, dateString)
+      setAvailableTimeSlots(timeSlots)
+      
+      console.log(`✅ Encontrados ${timeSlots.length} horários disponíveis para ${dateString}`)
+    } catch (error) {
+      console.error('❌ Erro ao carregar horários disponíveis:', error)
+      setAvailableTimeSlots([])
+    } finally {
+      setLoadingTimeSlots(false)
+    }
+  }
+
+  /**
    * Abre modal de reserva
    */
-  const openBookingModal = (court) => {
+  const openBookingModal = async (court) => {
     setSelectedCourt(court)
     setCalculatedPrice(0) // Reseta o preço
+    setAvailableTimeSlots([]) // Limpa horários anteriores
     setBookingModalOpen(true)
     
     // Preencher automaticamente o campo courtId
@@ -283,10 +309,39 @@ const PlayerDashboard = () => {
   const calculateTotalPrice = (startTime, endTime, hourlyRate) => {
     if (!startTime || !endTime || !hourlyRate) return 0
     
-    const start = new Date(startTime || new Date())
-    const end = new Date(endTime || new Date())
+    // Se são strings (horários do seletor), converter para objetos Date
+    let start, end
+    
+    // Obter a data do formulário ou usar a data selecionada globalmente
+    const formData = form.getFieldsValue()
+    const bookingDate = formData.bookingDate ? formData.bookingDate.format('YYYY-MM-DD') : (selectedDate ? selectedDate.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0])
+    
+    if (typeof startTime === 'string') {
+      // Formato "HH:mm" - usar a data do formulário
+      start = new Date(`${bookingDate} ${startTime}`)
+    } else {
+      start = new Date(startTime || new Date())
+    }
+    
+    if (typeof endTime === 'string') {
+      // Formato "HH:mm" - usar a data do formulário
+      end = new Date(`${bookingDate} ${endTime}`)
+    } else {
+      end = new Date(endTime || new Date())
+    }
+    
     const durationMs = end.getTime() - start.getTime()
     const durationHours = durationMs / (1000 * 60 * 60) // Converter para horas
+    
+    console.log('🔍 Debug - Cálculo de preço:', {
+      startTime,
+      endTime,
+      hourlyRate,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      durationMs,
+      durationHours
+    })
     
     return Math.round(durationHours * hourlyRate * 100) / 100 // Arredondar para 2 casas decimais
   }
@@ -307,10 +362,17 @@ const PlayerDashboard = () => {
     if ((changedValues.startTime || changedValues.endTime) && 
         allValues.startTime && allValues.endTime && selectedCourt) {
       
+      console.log('🔍 Recalculando preço com novos horários:', {
+        startTime: allValues.startTime,
+        endTime: allValues.endTime,
+        courtPrice: selectedCourt.price
+      })
+      
       const price = calculateTotalPrice(allValues.startTime, allValues.endTime, selectedCourt.price)
-      console.log('Calculated price:', price, 'for court:', selectedCourt.name, 'hourly rate:', selectedCourt.price)
-        setCalculatedPrice(price)
-        form.setFieldsValue({ totalPrice: price })
+      console.log('💰 Preço calculado:', price, 'para quadra:', selectedCourt.name, 'taxa horária:', selectedCourt.price)
+      
+      setCalculatedPrice(price)
+      form.setFieldsValue({ totalPrice: price })
     }
   }
 
@@ -331,10 +393,83 @@ const PlayerDashboard = () => {
         return
       }
       
-      // Formatar data e horário corretamente
-      const selectedDate = values.startTime ? values.startTime.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0]
-      const startTime = values.startTime ? values.startTime.format('HH:mm') : '00:00'
+      // Formatar data e horário para validação
+      const bookingDate = values.bookingDate ? values.bookingDate.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0]
+      const startTime = values.startTime || '00:00'
+      
+      // VALIDAÇÃO CRÍTICA: Verificar se o horário ainda está disponível
+      console.log('🔍 Verificando disponibilidade antes da reserva:', {
+        courtId: selectedCourt.id,
+        date: bookingDate,
+        time: startTime
+      })
+      
+      const isAvailable = await availabilityService.isTimeSlotAvailable(
+        selectedCourt.id, 
+        bookingDate, 
+        startTime
+      )
+      
+      if (!isAvailable) {
+        notification.error({
+          message: 'Horário não disponível',
+          description: 'Este horário foi ocupado por outro jogador ou bloqueado pelo dono. Tente outro horário.',
+          placement: 'topRight'
+        })
+        return
+      }
+      
+      console.log('✅ Horário de início confirmado como disponível!')
+      
       const endTime = values.endTime ? values.endTime.format('HH:mm') : '00:00'
+      
+      // Verificar se o horário de fim também não conflita (para reservas de múltiplas horas)
+      if (startTime !== endTime) {
+        const endTimeAvailable = await availabilityService.isTimeSlotAvailable(
+          selectedCourt.id, 
+          bookingDate, 
+          endTime
+        )
+        
+        if (!endTimeAvailable) {
+          notification.error({
+            message: 'Horário de fim não disponível',
+            description: 'O horário de fim selecionado foi ocupado. Tente ajustar a duração da reserva.',
+            placement: 'topRight'
+          })
+          return
+        }
+        
+        console.log('✅ Horário de fim também confirmado como disponível!')
+        
+        // Verificar horários intermediários para reservas de múltiplas horas
+        const startHour = parseInt(startTime.split(':')[0])
+        const endHour = parseInt(endTime.split(':')[0])
+        
+        if (endHour > startHour + 1) {
+          console.log('🔍 Verificando horários intermediários...')
+          
+          for (let hour = startHour + 1; hour < endHour; hour++) {
+            const intermediateTime = `${hour.toString().padStart(2, '0')}:00`
+            const intermediateAvailable = await availabilityService.isTimeSlotAvailable(
+              selectedCourt.id, 
+              bookingDate, 
+              intermediateTime
+            )
+            
+            if (!intermediateAvailable) {
+              notification.error({
+                message: 'Conflito em horário intermediário',
+                description: `O horário ${intermediateTime} foi ocupado. Tente ajustar a duração da reserva.`,
+                placement: 'topRight'
+              })
+              return
+            }
+          }
+          
+          console.log('✅ Todos os horários intermediários confirmados como disponíveis!')
+        }
+      }
       
       // Debug: Log dos valores processados
       console.log('🔍 Debug - Valores do formulário:')
@@ -356,12 +491,12 @@ const PlayerDashboard = () => {
         establishmentName: selectedCourt.establishmentName || selectedCourt.name,
         playerId: user.uid,
         playerName: user.displayName || user.email,
-        date: selectedDate,
+        date: bookingDate,
         time: startTime,
         endTime: endTime,
         totalPrice: calculatedTotalPrice,
         price: selectedCourt.price,
-        duration: values.startTime && values.endTime ? Math.round((new Date(values.endTime).getTime() - new Date(values.startTime).getTime()) / (1000 * 60 * 60) * 100) / 100 : 0,
+        duration: startTime && endTime ? Math.round((new Date(`${bookingDate} ${endTime}`).getTime() - new Date(`${bookingDate} ${startTime}`).getTime()) / (1000 * 60 * 60) * 100) / 100 : 0,
         sport: selectedCourt.sport || 'Não informado',
         status: 'pending'
       }
@@ -395,6 +530,32 @@ const PlayerDashboard = () => {
    */
   const handlePaymentSuccess = async () => {
     try {
+      // VALIDAÇÃO FINAL: Verificar se o horário ainda está disponível no momento do pagamento
+      console.log('🔍 Validação final de disponibilidade antes do pagamento:', {
+        courtId: selectedBooking.courtId,
+        date: selectedBooking.date,
+        time: selectedBooking.time
+      })
+      
+      const isStillAvailable = await availabilityService.isTimeSlotAvailable(
+        selectedBooking.courtId, 
+        selectedBooking.date, 
+        selectedBooking.time
+      )
+      
+      if (!isStillAvailable) {
+        notification.error({
+          message: 'Horário não disponível',
+          description: 'Este horário foi ocupado enquanto você estava fazendo o pagamento. Tente outro horário.',
+          placement: 'topRight'
+        })
+        setPaymentModalOpen(false)
+        setSelectedBooking(null)
+        return
+      }
+      
+      console.log('✅ Horário ainda disponível no momento do pagamento!')
+      
       // Criar dados da reserva para o Firebase
       const bookingData = {
         ...selectedBooking,
@@ -1222,6 +1383,26 @@ const PlayerDashboard = () => {
             </Form.Item>
 
             <Form.Item
+              name="bookingDate"
+              label="📅 Data da Reserva"
+              rules={[{ required: true, message: 'Selecione a data!' }]}
+              help="Escolha a data para ver os horários disponíveis"
+            >
+              <DatePicker 
+                placeholder="Selecione a data"
+                style={{ width: '100%' }}
+                size="large"
+                disabledDate={(current) => current && current < dayjs().startOf('day')}
+                onChange={(date) => {
+                  if (date && selectedCourt) {
+                    // Recarregar horários quando a data mudar
+                    loadTimeSlotsForDate(selectedCourt.id, date)
+                  }
+                }}
+              />
+            </Form.Item>
+
+            <Form.Item
               name="sport"
               label="Esporte"
               rules={[{ required: true, message: 'Selecione o esporte!' }]}
@@ -1235,34 +1416,83 @@ const PlayerDashboard = () => {
               </Select>
             </Form.Item>
 
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item
-                  name="startTime"
-                  label="Data e Hora Início"
-                  rules={[{ required: true, message: 'Selecione a data e hora!' }]}
-                >
-                  <DatePicker 
-                    showTime 
-                    format="DD/MM/YYYY HH:mm"
-                    style={{ width: '100%' }}
-                  />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  name="endTime"
-                  label="Data e Hora Fim"
-                  rules={[{ required: true, message: 'Selecione a data e hora!' }]}
-                >
-                  <DatePicker 
-                    showTime 
-                    format="DD/MM/YYYY HH:mm"
-                    style={{ width: '100%' }}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+            {loadingTimeSlots ? (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '20px',
+                background: '#f6ffed',
+                border: '1px solid #b7eb8f',
+                borderRadius: '8px',
+                marginBottom: '16px'
+              }}>
+                <Spin size="large" />
+                <br />
+                <Text style={{ marginTop: '8px', display: 'block' }}>
+                  🔍 Carregando horários disponíveis...
+                </Text>
+              </div>
+            ) : availableTimeSlots.length === 0 ? (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '20px',
+                background: '#fff2e8',
+                border: '1px solid #ffb366',
+                borderRadius: '8px',
+                marginBottom: '16px'
+              }}>
+                <Text type="warning" style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                  ⚠️ Nenhum horário disponível
+                </Text>
+                <br />
+                <Text type="secondary">
+                  Não há horários livres para esta quadra na data selecionada. 
+                  Tente outra data ou escolha uma quadra diferente.
+                </Text>
+              </div>
+            ) : (
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="startTime"
+                    label="🕐 Horário de Início"
+                    rules={[{ required: true, message: 'Selecione o horário de início!' }]}
+                    help={`${availableTimeSlots.length} horários disponíveis`}
+                  >
+                    <Select 
+                      placeholder="Selecione o horário de início"
+                      style={{ width: '100%' }}
+                      size="large"
+                    >
+                      {availableTimeSlots.map(slot => (
+                        <Select.Option key={slot.time} value={slot.time}>
+                          🕐 {slot.time} - Disponível
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="endTime"
+                    label="🕐 Horário de Fim"
+                    rules={[{ required: true, message: 'Selecione o horário de fim!' }]}
+                    help="Selecione quando deseja terminar"
+                  >
+                    <Select 
+                      placeholder="Selecione o horário de fim"
+                      style={{ width: '100%' }}
+                      size="large"
+                    >
+                      {availableTimeSlots.map(slot => (
+                        <Select.Option key={slot.time} value={slot.time}>
+                          🕐 {slot.time} - Disponível
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+            )}
 
             <Form.Item
               name="totalPrice"
@@ -1313,9 +1543,9 @@ const PlayerDashboard = () => {
                 <Button 
                   type="primary" 
                   htmlType="submit"
-                  disabled={calculatedPrice <= 0}
+                  disabled={calculatedPrice <= 0 || availableTimeSlots.length === 0}
                 >
-                  Ir para Pagamento (R$ {calculatedPrice.toFixed(2)})
+                  {availableTimeSlots.length === 0 ? 'Nenhum horário disponível' : `Ir para Pagamento (R$ ${calculatedPrice.toFixed(2)})`}
                 </Button>
               </Space>
             </Form.Item>
