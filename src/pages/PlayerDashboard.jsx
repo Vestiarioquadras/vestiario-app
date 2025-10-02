@@ -19,7 +19,9 @@ import {
   notification,
   Divider,
   Drawer,
-  Spin
+  Spin,
+  Image,
+  Carousel
 } from 'antd'
 import { 
   UserOutlined, 
@@ -33,11 +35,13 @@ import {
   ReloadOutlined,
   TrophyOutlined,
   TeamOutlined,
-  MenuOutlined
+  MenuOutlined,
+  EyeOutlined,
+  PictureOutlined
 } from '@ant-design/icons'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
-import { sportsService, courtsService, bookingsService, favoritesService, matchHistoryService, availabilityService } from '../services/firestoreService'
+import { sportsService, courtsService, bookingsService, favoritesService, matchHistoryService, availabilityService, courtScheduleService } from '../services/firestoreService'
 import PaymentForm from '../components/PaymentForm'
 import Logo from '../components/Logo'
 import useResponsive from '../hooks/useResponsive'
@@ -79,6 +83,7 @@ const PlayerDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [availableTimeSlots, setAvailableTimeSlots] = useState([])
   const [loadingTimeSlots, setLoadingTimeSlots] = useState(false)
+  const [courtSchedules, setCourtSchedules] = useState({}) // Armazenar horários de funcionamento
 
   /**
    * Carrega dados iniciais quando o usuário é carregado
@@ -172,6 +177,11 @@ const PlayerDashboard = () => {
       
       console.log(`✅ Encontradas ${courtsData.length} quadras com disponibilidade`)
       setCourtsWithAvailability(courtsData)
+      
+      // Carregar horários de funcionamento das quadras encontradas
+      if (courtsData.length > 0) {
+        await loadCourtSchedules(courtsData)
+      }
     } catch (error) {
       console.error('❌ Erro ao carregar disponibilidade:', error)
       message.error('Erro ao carregar disponibilidade')
@@ -213,6 +223,170 @@ const PlayerDashboard = () => {
   }
 
   /**
+   * Carrega horários de funcionamento das quadras
+   */
+  const loadCourtSchedules = async (courts) => {
+    try {
+      const schedules = {}
+      
+      // Buscar horários de funcionamento para cada quadra
+      for (const court of courts) {
+        try {
+          const schedule = await courtScheduleService.getCourtSchedule(court.id)
+          schedules[court.id] = schedule
+        } catch (error) {
+          console.log(`⚠️ Erro ao buscar horários da quadra ${court.id}:`, error)
+          // Usar horários padrão em caso de erro
+          schedules[court.id] = {
+            isOpen24h: false,
+            weekdays: {
+              monday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+              tuesday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+              wednesday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+              thursday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+              friday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+              saturday: { isOpen: true, openTime: '08:00', closeTime: '22:00' },
+              sunday: { isOpen: true, openTime: '08:00', closeTime: '22:00' }
+            },
+            isDefault: true
+          }
+        }
+      }
+      
+      setCourtSchedules(schedules)
+      console.log('✅ Horários de funcionamento carregados:', schedules)
+    } catch (error) {
+      console.error('❌ Erro ao carregar horários de funcionamento:', error)
+    }
+  }
+
+  /**
+   * Formata os horários de funcionamento para exibição
+   */
+  const getCourtOperatingHours = (courtId) => {
+    const schedule = courtSchedules[courtId]
+    if (!schedule) return 'Carregando...'
+    
+    if (schedule.isOpen24h) {
+      return '24 horas'
+    }
+    
+    const today = new Date()
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const todayName = dayNames[today.getDay()]
+    const todaySchedule = schedule.weekdays[todayName]
+    
+    if (!todaySchedule?.isOpen) {
+      return 'Fechado hoje'
+    }
+    
+    return `${todaySchedule.openTime} às ${todaySchedule.closeTime}`
+  }
+
+  /**
+   * Verifica se a quadra está aberta agora
+   */
+  const isCourtOpenNow = (courtId) => {
+    const schedule = courtSchedules[courtId]
+    if (!schedule) return false
+    
+    if (schedule.isOpen24h) return true
+    
+    const now = new Date()
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const todayName = dayNames[now.getDay()]
+    const todaySchedule = schedule.weekdays[todayName]
+    
+    if (!todaySchedule?.isOpen) return false
+    
+    const currentTime = now.getHours() * 60 + now.getMinutes()
+    const [openHour, openMin] = todaySchedule.openTime.split(':').map(Number)
+    const [closeHour, closeMin] = todaySchedule.closeTime.split(':').map(Number)
+    const openTime = openHour * 60 + openMin
+    const closeTime = closeHour * 60 + closeMin
+    
+    return currentTime >= openTime && currentTime <= closeTime
+  }
+
+  /**
+   * Renderiza galeria de fotos da quadra
+   */
+  const renderCourtPhotos = (court) => {
+    const images = court.images || []
+    
+    // Debug: verificar se as imagens estão chegando
+    console.log('🖼️ Renderizando fotos para quadra:', court.name, 'Imagens:', images)
+    
+    if (images.length === 0) {
+      return (
+        <div style={{ 
+          height: '200px', 
+          background: 'linear-gradient(135deg, #f0f0f0 0%, #e0e0e0 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          border: '2px dashed #d9d9d9'
+        }}>
+          <PictureOutlined style={{ fontSize: '32px', color: '#bfbfbf', marginBottom: '8px' }} />
+          <Text type="secondary" style={{ fontSize: '14px' }}>
+            Nenhuma foto disponível
+          </Text>
+        </div>
+      )
+    }
+
+    if (images.length === 1) {
+      return (
+        <div style={{ marginBottom: '16px' }}>
+          <Image
+            src={images[0].url || images[0]}
+            alt={`${court.name} - Foto 1`}
+            style={{ 
+              width: '100%', 
+              height: '200px', 
+              objectFit: 'cover',
+              borderRadius: '8px'
+            }}
+            fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+          />
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <Carousel autoplay dots={true} style={{ borderRadius: '8px', overflow: 'hidden' }}>
+          {images.map((image, index) => (
+            <div key={index}>
+              <Image
+                src={image.url || image}
+                alt={`${court.name} - Foto ${index + 1}`}
+                style={{ 
+                  width: '100%', 
+                  height: '200px', 
+                  objectFit: 'cover'
+                }}
+                fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+              />
+            </div>
+          ))}
+        </Carousel>
+        <div style={{ 
+          textAlign: 'center', 
+          marginTop: '8px',
+          fontSize: '12px',
+          color: '#8c8c8c'
+        }}>
+          📸 {images.length} foto{images.length > 1 ? 's' : ''} • Deslize para ver mais
+        </div>
+      </div>
+    )
+  }
+
+  /**
    * Busca quadras/estabelecimentos com filtros
    */
   const searchCourts = async () => {
@@ -232,6 +406,11 @@ const PlayerDashboard = () => {
       )
       
       setCourtsWithAvailability(courtsData)
+      
+      // Carregar horários de funcionamento das quadras encontradas
+      if (courtsData.length > 0) {
+        await loadCourtSchedules(courtsData)
+      }
       
       if (courtsData.length === 0) {
         notification.info({
@@ -1008,6 +1187,9 @@ const PlayerDashboard = () => {
                       style={{ border: '2px solid #ff4d4f' }}
                     >
                       <div>
+                        {/* Fotos da Quadra Favorita */}
+                        {favorite.images && renderCourtPhotos(favorite)}
+                        
                         <Text strong>🏢 {favorite.establishmentName}</Text>
                         <br />
                         <Text type="secondary">
@@ -1090,6 +1272,9 @@ const PlayerDashboard = () => {
                       ]}
                     >
                       <div>
+                        {/* Fotos da Quadra */}
+                        {renderCourtPhotos(court)}
+                        
                         <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
                           {court.name}
                         </Title>
@@ -1107,8 +1292,14 @@ const PlayerDashboard = () => {
                         <Divider style={{ margin: '12px 0' }} />
                         <Text strong>Preço:</Text> R$ {court.price}/hora
                         <br />
-                        <Text strong>Status:</Text> 
-                        <Tag color="green" style={{ marginLeft: '8px' }}>Disponível</Tag>
+                        <Text strong>Funcionamento:</Text> 
+                        <Tag color={isCourtOpenNow(court.id) ? "green" : "red"} style={{ marginLeft: '8px' }}>
+                          {isCourtOpenNow(court.id) ? "🟢 Aberto" : "🔴 Fechado"}
+                        </Tag>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          ⏰ Hoje: {getCourtOperatingHours(court.id)}
+                        </Text>
                         <br />
                         <Text strong>Horários Livres:</Text> 
                         <Tag color="blue" style={{ marginLeft: '8px' }}>
